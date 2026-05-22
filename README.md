@@ -162,6 +162,8 @@ Separação entre ambiente de build (com pip, cache de downloads) e runtime (ape
 
 Alpine (~50MB base) vs slim (~120MB base). Para uma API Flask simples sem dependências nativas, Alpine é suficiente. Menos pacotes = menor superfície de ataque.
 
+**Nota sobre floating tags:** Usamos `python:3.12-alpine` (tag flotante) em vez de pinar para `3.12.13-alpine3.21` ou digest. Para este desafio de trainee, tags flotantes são aceitáveis — você recebe atualizações de segurança automaticamente. Em produção, considere pinar para uma patch version específica ou usar digests para reproducibilidade e controle de supply-chain.
+
 ### BuildKit Cache Mounts
 
 O Dockerfile usa `--mount=type=cache,target=/root/.cache/pip` no `pip install` do builder. Isso permite que o Docker reutilize o cache de downloads do pip entre builds, mesmo que a camada de requirements.txt seja invalidada por outros motivos. Requer `DOCKER_BUILDKIT=1` (habilitado no pipeline CI).
@@ -169,6 +171,12 @@ O Dockerfile usa `--mount=type=cache,target=/root/.cache/pip` no `pip install` d
 ### Usuário Não-root
 
 Container roda como `appuser`. Se um atacante comprometer a aplicação, terá acesso limitado — sem privilícios de root. O ECS task definition também especifica `"user": "appuser"` para garantir que o runtime respeite isso.
+
+### Servidor de Desenvolvimento Flask
+
+A aplicação usa `app.run()` (Flask built-in server) em vez de um servidor production-grade como Gunicorn ou Waitress. Para este desafio de trainee, é aceitável — o foco é demonstrar CI/CD, containerização e IaC, não tuning de performance.
+
+**Limitações:** single-threaded, sem worker management, sem timeout handling, não testado em produção em larga escala. Para produção, substitua por Gunicorn (`gunicorn app:app --workers 4 --bind 0.0.0.0:5000`) e atualize o Dockerfile CMD.
 
 ### Healthcheck — Validação de HTTP 200 + corpo
 

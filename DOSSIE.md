@@ -107,7 +107,7 @@ Day 2 (May 22, afternoon — external audit fixes)
 ─────────────────────────────────────────────────
 12:20 22019cc fix: auditoria externa — assign_public_ip, Python >=3.11, prompts, healthcheck docs
 12:35 a458516 fix: auditoria round 2 — split deps, healthcheck comment, ruff cache, tag builds
-12:50 ??????? fix: auditoria round 3 — YAML cache structure, pin dev deps, tag latest safety, ignores
+12:50 bbbc455 fix: auditoria round 3 — YAML cache structure, pinned dev deps, tag latest safety
 ```
 
 The v1 commits contain **intentional real bugs** (broken IAM ARN, single SG, `|| true` in SAST,
@@ -538,5 +538,23 @@ nesting validated with PyYAML. All list items (before_script, script, rules) pro
 **CORRIGIDO:** Added DOSSIE.md to .dockerignore.
 
 17) ~~**LOW** — DOSSIE .dockerignore description stale, commit history incomplete, cache bonus wrong.~~
-**CORRIGIDO:** Updated DOSSIE file tree descriptions, commit history to 13+ commits, git diff
+**CORRIGIDO:** Updated DOSSIE file tree descriptions, commit history to 14 commits, git diff
 quick reference, and cache bonus to mention both requirements files.
+
+### Auditoria round 4 (Gemini, May 22, 2026)
+
+18) **MEDIUM** — Container runs Flask dev server (`app.run`), not production-grade.
+**RESPOSTA:** Documentado no README como limitação intencional para este desafio de trainee.
+Foco é CI/CD + IaC, não performance production. README now explicita:
+- Single-threaded, no worker management
+- No timeout handling
+- Not tested at production scale
+- Recommendation: replace with Gunicorn for production
+
+19) **LOW** — Base images use floating tags (`python:3.12-alpine`).
+**RESPOSTA:** Documentado no README — floating tags são aceitáveis para trainee challenge
+(security updates automáticos). Production should pin to patch version or digest.
+README now includes supply-chain/reproducibility note.
+
+20) ~~**LOW** — DOSSIE commit history has placeholder hash (???????).~~
+**CORRIGIDO:** Updated to actual commit hash `bbbc455`.
