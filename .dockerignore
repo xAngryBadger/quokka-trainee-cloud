@@ -1,0 +1,17 @@
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitlab
+.env
+.venv
+venv
+test_app.py
+docker-compose.yml
+terraform/
+.gitlab-ci.yml
+__pycache__/
+*.egg-info
+dist/
+build/
+.gitignore
