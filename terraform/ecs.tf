@@ -210,8 +210,9 @@ resource "aws_ecs_service" "app" {
   force_new_deployment   = true
 
   network_configuration {
-    subnets         = data.aws_subnets.default.ids
-    security_groups = [aws_security_group.ecs_sg.id]
+    subnets          = data.aws_subnets.default.ids
+    security_groups  = [aws_security_group.ecs_sg.id]
+    assign_public_ip = true
   }
 
   load_balancer {

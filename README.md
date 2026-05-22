@@ -25,6 +25,8 @@ docker run -d -p 5000:5000 --name trainee-api trainee-devops-api
 
 ### Opção 3: Python Direto
 
+> **Requer Python >= 3.11** — o código usa `datetime.UTC`, introduzido no Python 3.11.
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -100,6 +102,7 @@ O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de seguran
 - **Critério de falha:** Job falha se o build ou push falhar
 - **Quando roda:** Na branch main automaticamente; em MRs apenas manual (sem `allow_failure` — se alguém dispara manualmente, o resultado importa)
 - **Variáveis utilizadas:** `$CI_REGISTRY`, `$CI_REGISTRY_USER`, `$CI_REGISTRY_PASSWORD` (predefinidas pelo GitLab)
+- **Nota TLS:** O job define `DOCKER_TLS_CERTDIR` e `DOCKER_HOST` conforme documentação GitLab. Runners compartilhados injetam `DOCKER_TLS_VERIFY` e `DOCKER_CERT_PATH` automaticamente. Em runners self-hosted com TLS estrito, pode ser necessário definir essas variáveis explicitamente.
 
 ### Stage 4: Deploy
 
@@ -168,7 +171,7 @@ Container roda como `appuser`. Se um atacante comprometer a aplicação, terá a
 
 ### Healthcheck — Validação de HTTP 200 + corpo
 
-O healthcheck não apenas verifica conectividade (`urlopen` lança exceção em erros de conexão), mas também valida que o HTTP status code é 200 (`assert r.status==200`). Sem isso, um 500 Internal Server Error passaria no healthcheck, já que `urlopen` só lança exceção em erros de conexão, não em status codes de erro.
+O healthcheck valida explicitamente `assert r.status==200`. Embora `urlopen` lance `HTTPError` em 4xx/5xx por padrão, o `assert` torna a intenção explícita e funciona como defense-in-depth — se um handler customizado suprimir a exceção, o assert ainda garante que apenas 200 é aceito.
 
 ### Security Groups — Acesso ao container apenas via ALB
 
@@ -280,17 +283,17 @@ Utilizei o **opencode** (CLI de IA para engenharia de software) com o modelo **G
 
 ### O que pedi a IA
 
-1. **Dockerfile** — Geração inicial com multi-stage build, usuário não-root e healthcheck. O resultado foi bom, mas o healthcheck apenas verificava conectividade sem validar o HTTP status code — eu corrigi para checar `assert r.status==200`. Também adicionei BuildKit cache mounts que a versão inicial não usava.
+1. **Dockerfile** — Prompt: *"Gere um Dockerfile para a Flask API com multi-stage build, usuário não-root e healthcheck."* O resultado foi bom, mas o healthcheck apenas verificava conectividade sem validar o HTTP status code — eu corrigi para checar `assert r.status==200`. Também adicionei BuildKit cache mounts que a versão inicial não usava.
 
-2. **App.py** — O código fornecido pelo desafio usava `datetime.utcnow()`, que está deprecated desde Python 3.12. Substituí por `datetime.now(timezone.utc)` que retorna timestamps timezone-aware, alinhado com as recomendações da PEP 685.
+2. **App.py** — Prompt: *"O código fornecido pelo desafio usa datetime.utcnow(), que está deprecated. Corrija para o equivalente moderno."* Substituí por `datetime.now(UTC)` que retorna timestamps timezone-aware, alinhado com as recomendações da PEP 685.
 
-3. **Pipeline CI/CD** — Geração da estrutura base do `.gitlab-ci.yml`. A IA gerou regras que causavam pipelines duplicados (MR event + branch push simultâneos) — eu adicionei `workflow.rules` para resolver. O SAST tinha `|| true` que tornava o scan inútil — corrigi para usar `--severity-level high`. O build em MRs tinha `allow_failure: true` que ocultava falhas — removi.
+3. **Pipeline CI/CD** — Prompt: *"Crie um .gitlab-ci.yml com stages de lint, test, build e deploy para a Flask API."* A IA gerou regras que causavam pipelines duplicados (MR event + branch push simultâneos) — eu adicionei `workflow.rules` para resolver. O SAST tinha `|| true` que tornava o scan inútil — corrigi para usar `--severity-level high`. O build em MRs tinha `allow_failure: true` que ocultava falhas — removi.
 
-4. **Terraform para ECS** — Geração dos recursos principais. A IA produziu um ARN de policy IAM com sintaxe inválida (`arn:aws:iam:::aws:policy/...` — um `:` a mais entre account e resource), outputs duplicados entre `ecs.tf` e `outputs.tf`, e um security group que abria a porta do container para `0.0.0.0/0` permitindo bypass do ALB. Corrigi todos os três problemas e separei as security groups em ALB SG e ECS SG.
+4. **Terraform para ECS** — Prompt: *"Gere infraestrutura Terraform para deploy desta API no AWS ECS Fargate com ALB, security groups e IAM."* A IA produziu um ARN de policy IAM com sintaxe inválida (`arn:aws:iam:::aws:policy/...` — um `:` a mais), outputs duplicados entre `ecs.tf` e `outputs.tf`, e um security group que abria a porta do container para `0.0.0.0/0`. Corrigi todos os três e separei as security groups.
 
-5. **Docker Compose e healthcheck.sh** — O healthcheck.sh inicial dependia de `python3` para parsear JSON, o que não é confiável em ambientes sem Python. Reescrevi usando `wget` + `grep` puro (shell).
+5. **Docker Compose e healthcheck.sh** — Prompt: *"Crie um docker-compose.yml e um script de healthcheck externo que não dependa de Python."* O healthcheck.sh inicial ainda dependia de `python3` para parsear JSON. Reescrevi usando `wget` + `grep` puro (shell).
 
-6. **README** — Geração da estrutura de documentação. A IA não incluiu instruções para rodar o Terraform, não mencionou considerações para GitLab Self-Hosted, e a seção de IA era genérica — reescrevi com exemplos específicos dos bugs que encontrei e corrigi.
+6. **README** — Prompt: *"Gere um README completo documentando a aplicação, pipeline, infraestrutura e uso de IA."* A IA não incluiu instruções para rodar o Terraform, não mencionou considerações para GitLab Self-Hosted, e a seção de IA era genérica — reescrevi com exemplos específicos dos bugs que encontrei e corrigi.
 
 ### O que funcionou bem
 
@@ -301,7 +304,7 @@ Utilizei o **opencode** (CLI de IA para engenharia de software) com o modelo **G
 ### O que não funcionou tão bem
 
 - **Detalhes específicos de plataforma** — A IA gerou ARN IAM inválido, outputs duplicados no Terraform, e security groups que comprometiam a segurança do deploy ECS. Nenhum desses erros seria óbvio sem revisão manual cuidadosa.
-- **Healthcheck incompleto** — A IA gerou healthchecks que verificavam conectividade mas não validavam o HTTP status code. Um 500 passaria como "healthy."
+- **Healthcheck com intenção implícita** — A IA gerou healthchecks que verificavam conectividade mas não validavam explicitamente o HTTP status code. Embora `urlopen` lance `HTTPError` em 5xx, o `assert r.status==200` torna a intenção explícita e funciona como defense-in-depth se a exceção for suprimida por algum handler.
 - **CI/CD com falsos negativos** — O SAST com `|| true`, o build com `allow_failure: true`, e pipelines duplicados são antipadrões que parecem funcionais mas subvertem o propósito do pipeline.
 - **Segurança por aparência** — A IA gerou arquivos que *pareciam* seguros (security groups, non-root user) mas com configurações que neutralizavam a proteção (porta aberta para o mundo, healthcheck sem validação real).
 
