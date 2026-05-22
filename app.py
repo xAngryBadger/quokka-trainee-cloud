@@ -1,5 +1,6 @@
+from datetime import UTC, datetime
+
 from flask import Flask, jsonify
-from datetime import datetime, timezone
 
 app = Flask(__name__)
 
@@ -9,7 +10,7 @@ def health():
     return jsonify(
         {
             "status": "healthy",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "version": "1.0.0",
         }
     )
@@ -21,4 +22,4 @@ def index():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000)  # noqa: S104 — containers must bind to all interfaces

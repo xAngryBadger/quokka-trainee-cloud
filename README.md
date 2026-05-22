@@ -129,20 +129,21 @@ Isso evita o problema comum de pipelines duplicados (um do MR event, outro do br
 
 ```
 .
-├── app.py                  # Aplicação Flask
-├── test_app.py             # Testes unitários
-├── requirements.txt        # Dependências Python
-├── Dockerfile              # Containerização com multi-stage build
-├── docker-compose.yml      # Compose para rodar localmente
-├── healthcheck.sh          # Script de verificação de saúde (shell puro, sem python)
-├── .gitlab-ci.yml          # Pipeline CI/CD
-├── .dockerignore           # Arquivos ignorados no build Docker
-├── .gitignore              # Arquivos ignorados pelo Git
+├── app.py              # Aplicação Flask
+├── test_app.py         # Testes unitários
+├── requirements.txt    # Dependências Python
+├── ruff.toml           # Configuração do linter
+├── Dockerfile          # Containerização com multi-stage build
+├── docker-compose.yml  # Compose para rodar localmente
+├── healthcheck.sh      # Script de verificação de saúde (shell puro, sem python)
+├── .gitlab-ci.yml      # Pipeline CI/CD
+├── .dockerignore       # Arquivos ignorados no build Docker
+├── .gitignore          # Arquivos ignorados pelo Git
 └── terraform/
-    ├── main.tf             # Provider AWS e backend S3
-    ├── variables.tf        # Variáveis do Terraform
-    ├── ecs.tf              # Recursos ECS, ALB, IAM, CloudWatch, Security Groups
-    └── outputs.tf          # Outputs da infraestrutura
+    ├── main.tf         # Provider AWS e backend S3
+    ├── variables.tf    # Variáveis do Terraform
+    ├── ecs.tf          # Recursos ECS, ALB, IAM, CloudWatch, Security Groups
+    └── outputs.tf      # Outputs da infraestrutura
 ```
 
 ---
@@ -179,7 +180,11 @@ Isso impede bypass do ALB. Em ECS com `awsvpc` network mode, tasks recebem seus 
 
 ### Linter — ruff em vez de flake8
 
-Ruff é 10-100x mais rápido que flake8, tem regras compatíveis e é o padrão moderno da comunidade Python. Em um pipeline CI/CD, velocidade importa.
+Ruff é 10-100x mais rápido que flake8, tem regras compatíveis e é o padrão moderno da comunidade Python. Em um pipeline CI/CD, velocidade importa. O arquivo `ruff.toml` configura as regras explicitamente: `E/W` (pycodestyle), `F` (pyflakes), `I` (isort), `UP` (pyupgrade para 3.12+), `B` (bugbear), `SIM` (simplify), `C4` (comprehensions) e `S` (bandit security). Rodar ruff sem config é aceitar defaults cegos — o `ruff.toml` documenta o que consideramos erro e por quê.
+
+### readonlyRootFilesystem — Container imutável
+
+O task definition do ECS define `readonlyRootFilesystem = true`. Se um atacante conseguir RCE, não pode escrever binários, scripts ou configs no filesystem do container. Flask não precisa de writes para esta aplicação — Python ignora `__pycache__` graciosamente quando o diretório é read-only. Em apps que precisam de `/tmp`, um tmpfs mount resolveria; aqui não é necessário.
 
 ### Deploy — Manual com `when: manual`
 

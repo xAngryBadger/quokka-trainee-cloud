@@ -1,0 +1,26 @@
+line-length = 88
+
+target-version = "py312"
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes — unused imports, variables
+    "I",   # isort — import ordering
+    "UP",  # pyupgrade — modernize syntax for Python 3.12+
+    "B",   # flake8-bugbear — common gotchas and anti-patterns
+    "SIM", # flake8-simplify — simplify gratuitous complexity
+    "C4",  # flake8-comprehensions — unnecessary list/dict calls
+    "S",   # flake8-bandit — security anti-patterns
+]
+
+ignore = [
+    "S101", # assert is fine in test files (ruff auto-excludes test_*)
+]
+
+[lint.isort]
+known-first-party = ["app"]
+
+[format]
+quote-style = "double"

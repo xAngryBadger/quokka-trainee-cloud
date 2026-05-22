@@ -19,3 +19,4 @@ build/
 README.md
 .pytest_cache/
 bandit-report.json
+ruff.toml

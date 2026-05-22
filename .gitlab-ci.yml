@@ -51,7 +51,7 @@ lint:
   before_script:
     - pip install --cache-dir=.pip-cache ruff
   script:
-    - ruff check app.py test_app.py
+    - ruff check app.py test_app.py --config ruff.toml
 
 # =============================================================================
 # STAGE: TEST
