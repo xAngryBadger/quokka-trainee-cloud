@@ -31,12 +31,16 @@ WORKDIR /app
 # Dependencies from builder — no pip cache, no build toolchain
 COPY --from=builder /install /usr/local
 
+# Copy application source code
 COPY app.py .
 
+# Ensure appuser owns the application files
 RUN chown -R appuser:appuser /app
 
+# Switch to non-root user for security (least privilege)
 USER appuser
 
+# Expose port 5000 for Flask/Gunicorn
 EXPOSE 5000
 
 # Use Gunicorn production WSGI server with 2 workers, 4 threads each
@@ -44,4 +48,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request; r=urllib.request.urlopen('http://localhost:5000/health'); assert r.status==200" || exit 1
 
+# Run Gunicorn WSGI server (production-ready)
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "app:app"]

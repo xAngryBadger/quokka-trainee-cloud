@@ -71,7 +71,7 @@ graph LR
     E --> F[Deploy — manual, main only]
 ```
 
-O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de segurança:
+O pipeline `.gitlab-ci.yml` possui 5 stages sequenciais (lint → test → validate-infra → build → deploy) + 1 job bonus de segurança (SAST no stage test):
 
 ### Stage 1: Lint
 
@@ -80,7 +80,7 @@ O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de seguran
 - **Critério de falha:** Job falha se o ruff encontrar qualquer violação
 - **Quando roda:** Em MRs e na branch main (controlado por `workflow.rules` para evitar pipelines duplicados)
 
-### Stage 2: Test
+### Stage 2: Test (pytest + bandit)
 
 - **Ferramenta:** `pytest`
 - **O que faz:** Executa os testes unitários em `test_app.py` validando os endpoints `/health` e `/`
@@ -95,16 +95,14 @@ O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de seguran
 - **Quando roda:** Na branch main, em MRs e em tags
 - **Artefato:** Gera `bandit-report.json` para análise posterior
 
-### Stage 3: Build
+### Stage 3: Validate Infrastructure (Terraform)
 
-- **Ferramenta:** Docker (Docker-in-Docker) com BuildKit habilitado
-- **O que faz:** Constrói a imagem Docker usando o Dockerfile com multi-stage build e faz push para o GitLab Container Registry com duas tags: commit SHA e `latest`
-- **Critério de falha:** Job falha se o build ou push falhar
-- **Quando roda:** Na branch main e em tags automaticamente; em MRs apenas manual (sem `allow_failure` — se alguém dispara manualmente, o resultado importa). Tags produzem imagens com o nome da tag (ex: `v1.0.0`).
-- **Variáveis utilizadas:** `$CI_REGISTRY`, `$CI_REGISTRY_USER`, `$CI_REGISTRY_PASSWORD` (predefinidas pelo GitLab)
-- **Nota TLS:** O job define `DOCKER_TLS_CERTDIR` e `DOCKER_HOST` conforme documentação GitLab. Runners compartilhados injetam `DOCKER_TLS_VERIFY` e `DOCKER_CERT_PATH` automaticamente. Em runners self-hosted com TLS estrito, pode ser necessário definir essas variáveis explicitamente.
+- **Ferramenta:** Terraform (hashicorp/terraform:1.8)
+- **O que faz:** Roda `terraform fmt -check`, `terraform validate` e `terraform plan` para validar a infraestrutura antes do deploy.
+- **Critério de falha:** Job falha se formatação ou validação falharem.
+- **Quando roda:** Main e MRs.
 
-### Stage 4: Deploy
+### Stage 4: Build
 
 - **O que faz:** Simula o deploy no AWS ECS imprimindo os comandos que seriam executados
 - **Quando roda:** Apenas na branch `main`, com aprovação manual (`when: manual`)
@@ -162,7 +160,7 @@ Separação entre ambiente de build (com pip, cache de downloads) e runtime (ape
 
 Alpine (~50MB base) vs slim (~120MB base). Para uma API Flask simples sem dependências nativas, Alpine é suficiente. Menos pacotes = menor superfície de ataque.
 
-**Nota sobre floating tags:** Usamos `python:3.12-alpine` (tag flotante) em vez de pinar para `3.12.13-alpine3.21` ou digest. Para este desafio de trainee, tags flotantes são aceitáveis — você recebe atualizações de segurança automaticamente. Em produção, considere pinar para uma patch version específica ou usar digests para reproducibilidade e controle de supply-chain.
+**Nota sobre pinned tags:** O Dockerfile usa `python:3.12.7-alpine3.20` (versão específica) em vez de tag flotante. Para este desafio de trainee, isso é aceitável — você recebe reproducibilidade de build. Em produção, considere usar digests (`@sha256:...`) para controle total de supply-chain.
 
 ### BuildKit Cache Mounts
 
@@ -338,7 +336,7 @@ Utilizei o **opencode** (CLI de IA para engenharia de software) com o modelo **G
 
 1. **Dockerfile** — Prompt: *"Gere um Dockerfile para a Flask API com multi-stage build, usuário não-root e healthcheck."* O resultado foi bom, mas o healthcheck apenas verificava conectividade sem validar o HTTP status code — eu corrigi para checar `assert r.status==200`. Também adicionei BuildKit cache mounts que a versão inicial não usava.
 
-2. **App.py** — Prompt: *"O código fornecido pelo desafio usa datetime.utcnow(), que está deprecated. Corrija para o equivalente moderno."* Substituí por `datetime.now(UTC)` que retorna timestamps timezone-aware, alinhado com as recomendações da PEP 685.
+2. **App.py** — Prompt: *"O código fornecido pelo desafio usa datetime.utcnow(), que está deprecated. Corrija para o equivalente moderno."* Substituí por `datetime.now(UTC)` que retorna timestamps timezone-aware, alinhado com as recomendações da PEP 685. **Modificações adicionais (além do base):** logging estruturado, handlers de erro globais (`@app.errorhandler`), logging de requests (`@app.before_request`), e tratamento de exceções em todos os endpoints. Estas mudanças vão além do base fornecido e são documentadas na seção "Decisões Técnicas".
 
 3. **Pipeline CI/CD** — Prompt: *"Crie um .gitlab-ci.yml com stages de lint, test, build e deploy para a Flask API."* A IA gerou regras que causavam pipelines duplicados (MR event + branch push simultâneos) — eu adicionei `workflow.rules` para resolver. O SAST tinha `|| true` que tornava o scan inútil — corrigi para usar `--severity-level high`. O build em MRs tinha `allow_failure: true` que ocultava falhas — removi.
 
