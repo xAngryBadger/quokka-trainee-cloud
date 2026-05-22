@@ -64,11 +64,11 @@ pytest test_app.py -v
 
 ```mermaid
 graph LR
-    A[Push / MR] --> B[Lint — ruff]
-    B --> C[Test — pytest]
-    B --> D[SAST — bandit]
-    C --> E[Build — docker push]
-    E --> F[Deploy — manual, main only]
+A[Push / MR] --> B[Lint — ruff]
+B --> C[Test — pytest + SAST]
+C --> D[Validate Infra — terraform]
+D --> E[Build — docker push]
+E --> F[Deploy — manual, main only]
 ```
 
 O pipeline `.gitlab-ci.yml` possui 5 stages sequenciais (lint → test → validate-infra → build → deploy) + 1 job bonus de segurança (SAST no stage test):
@@ -103,6 +103,14 @@ O pipeline `.gitlab-ci.yml` possui 5 stages sequenciais (lint → test → valid
 - **Quando roda:** Main e MRs.
 
 ### Stage 4: Build
+
+- **Ferramenta:** Docker (Docker-in-Docker) com BuildKit habilitado
+- **O que faz:** Constrói a imagem Docker usando multi-stage build e faz push para o GitLab Container Registry com tags: SHA do commit e `latest` (apenas na main). Tags git (ex: v1.0.0) geram imagem com nome da tag.
+- **Critério de falha:** Job falha se build ou push falhar
+- **Quando roda:** Main e tags (automático); MRs (manual)
+- **Variáveis:** `$CI_REGISTRY`, `$CI_REGISTRY_USER`, `$CI_REGISTRY_PASSWORD`
+
+### Stage 5: Deploy
 
 - **O que faz:** Simula o deploy no AWS ECS imprimindo os comandos que seriam executados
 - **Quando roda:** Apenas na branch `main`, com aprovação manual (`when: manual`)
@@ -336,7 +344,13 @@ Utilizei o **opencode** (CLI de IA para engenharia de software) com o modelo **G
 
 1. **Dockerfile** — Prompt: *"Gere um Dockerfile para a Flask API com multi-stage build, usuário não-root e healthcheck."* O resultado foi bom, mas o healthcheck apenas verificava conectividade sem validar o HTTP status code — eu corrigi para checar `assert r.status==200`. Também adicionei BuildKit cache mounts que a versão inicial não usava.
 
-2. **App.py** — Prompt: *"O código fornecido pelo desafio usa datetime.utcnow(), que está deprecated. Corrija para o equivalente moderno."* Substituí por `datetime.now(UTC)` que retorna timestamps timezone-aware, alinhado com as recomendações da PEP 685. **Modificações adicionais (além do base):** logging estruturado, handlers de erro globais (`@app.errorhandler`), logging de requests (`@app.before_request`), e tratamento de exceções em todos os endpoints. Estas mudanças vão além do base fornecido e são documentadas na seção "Decisões Técnicas".
+2. **App.py** — Prompt: *"O código fornecido pelo desafio usa datetime.utcnow(), que está deprecated. Corrija para o equivalente moderno."* Substituí por `datetime.now(UTC)` que retorna timestamps timezone-aware, alinhado com as recomendações da PEP 685. **Modificações adicionais (além do base fornecido):**
+  - Adicionado logging estruturado com `logging.basicConfig` e formato ISO
+  - Adicionado `@app.before_request` para log de todas as requisições
+  - Adicionado `@app.after_request` para log de status de resposta
+  - Adicionado `@app.errorhandler(Exception)` para tratamento global de erros (500)
+  - Adicionado `@app.errorhandler(404)` para tratamento de rotas não encontradas
+  - Adicionado try/except em todos os endpoints para capturar exceções Estas mudanças vão além do base fornecido e são documentadas na seção "Decisões Técnicas".
 
 3. **Pipeline CI/CD** — Prompt: *"Crie um .gitlab-ci.yml com stages de lint, test, build e deploy para a Flask API."* A IA gerou regras que causavam pipelines duplicados (MR event + branch push simultâneos) — eu adicionei `workflow.rules` para resolver. O SAST tinha `|| true` que tornava o scan inútil — corrigi para usar `--severity-level high`. O build em MRs tinha `allow_failure: true` que ocultava falhas — removi.
 

@@ -5,6 +5,7 @@
 # Pinning to specific Alpine version for reproducibility and supply-chain security
 FROM python:3.12.7-alpine3.20 AS builder
 
+# Set build context directory (separate from runtime for multi-stage)
 WORKDIR /build
 
 # Cache invalidated only when requirements change — code rebuilds don't
@@ -20,12 +21,14 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Pinning to specific Alpine version for reproducibility and supply-chain security
 FROM python:3.12.7-alpine3.20
 
+# Metadata labels for container registry and orchestration
 LABEL maintainer="Trainee Cloud & IA"
 LABEL description="API Flask — Health Check para pipeline CI/CD"
 
 # Non-root user: a compromised process has no root privileges inside the container
 RUN adduser -D -s /bin/sh appuser
 
+# Set runtime application directory (separate from build stage)
 WORKDIR /app
 
 # Dependencies from builder — no pip cache, no build toolchain
