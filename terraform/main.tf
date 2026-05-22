@@ -9,9 +9,10 @@ terraform {
   }
 
   backend "s3" {
-    bucket = "terraform-state-trainee"
-    key    = "ecs/terraform.tfstate"
-    region = "us-east-1"
+    bucket         = "terraform-state-trainee"
+    key            = "ecs/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "terraform-locks"
   }
 }
 

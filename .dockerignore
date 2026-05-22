@@ -10,8 +10,12 @@ test_app.py
 docker-compose.yml
 terraform/
 .gitlab-ci.yml
+healthcheck.sh
 __pycache__/
 *.egg-info
 dist/
 build/
 .gitignore
+README.md
+.pytest_cache/
+bandit-report.json

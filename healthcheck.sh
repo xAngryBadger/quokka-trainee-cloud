@@ -15,8 +15,8 @@ response=$(wget -qO- --timeout=5 -S "$URL" 2>&1)
 http_code=$(echo "$response" | awk '/HTTP\//{print $2}' | tail -1)
 
 if [ "$http_code" != "200" ]; then
-  echo "CRITICAL - HTTP ${http_code:-none} from ${URL}"
-  exit 1
+    echo "CRITICAL - HTTP ${http_code:-none} from ${URL}"
+    exit 1
 fi
 
 # Extract body (everything after the last blank line separating headers from body)
@@ -24,9 +24,9 @@ body=$(echo "$response" | sed -n '/^$/,$ p' | tail -n +2)
 
 # Check that the response body contains "status":"healthy"
 if echo "$body" | grep -q '"status"[[:space:]]*:[[:space:]]*"healthy"'; then
-  echo "OK - API is healthy at ${URL}"
-  exit 0
+    echo "OK - API is healthy at ${URL}"
+    exit 0
 else
-  echo "CRITICAL - API responded 200 but body missing healthy status at ${URL}"
-  exit 1
+    echo "CRITICAL - API responded 200 but body missing healthy status at ${URL}"
+    exit 1
 fi

@@ -8,7 +8,7 @@ data "aws_vpc" "default" {
 
 data "aws_subnets" "default" {
   filter {
-    name = "vpc-id"
+    name   = "vpc-id"
     values = [data.aws_vpc.default.id]
   }
 }
@@ -27,10 +27,10 @@ resource "aws_security_group" "alb_sg" {
   }
 
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = var.container_port
+    to_port         = var.container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ecs_sg.id]
   }
 
   tags = {
@@ -68,11 +68,11 @@ resource "aws_security_group" "ecs_sg" {
 # =============================================================================
 
 resource "aws_lb" "app" {
-  name               = "${var.app_name}-alb"
-  internal           = false
+  name            = "${var.app_name}-alb"
+  internal        = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb_sg.id]
-  subnets            = data.aws_subnets.default.ids
+  security_groups = [aws_security_group.alb_sg.id]
+  subnets         = data.aws_subnets.default.ids
 }
 
 resource "aws_lb_target_group" "app" {
@@ -202,11 +202,12 @@ resource "aws_ecs_task_definition" "app" {
 # =============================================================================
 
 resource "aws_ecs_service" "app" {
-  name            = "${var.app_name}-service"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.app.arn
-  desired_count   = var.desired_count
-  launch_type     = "FARGATE"
+  name                   = "${var.app_name}-service"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.app.arn
+  desired_count          = var.desired_count
+  launch_type            = "FARGATE"
+  force_new_deployment   = true
 
   network_configuration {
     subnets         = data.aws_subnets.default.ids

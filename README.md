@@ -16,6 +16,8 @@ A aplicação estará disponível em `http://localhost:5000`.
 
 ### Opção 2: Docker Manual
 
+> **Nota:** O Dockerfile usa BuildKit cache mounts (`--mount=type=cache`). Requer Docker com BuildKit habilitado. Se o build falhar com "the --mount option requires BuildKit", instale o `docker-buildx` plugin ou use `DOCKER_BUILDKIT=1 docker build ...`.
+
 ```bash
 docker build -t trainee-devops-api .
 docker run -d -p 5000:5000 --name trainee-api trainee-devops-api
@@ -60,11 +62,11 @@ pytest test_app.py -v
 
 ```mermaid
 graph LR
-  A[Push / MR] --> B[Lint — ruff]
-  B --> C[Test — pytest]
-  B --> D[SAST — bandit]
-  C --> E[Build — docker push]
-  E --> F[Deploy — manual, main only]
+    A[Push / MR] --> B[Lint — ruff]
+    B --> C[Test — pytest]
+    B --> D[SAST — bandit]
+    C --> E[Build — docker push]
+    E --> F[Deploy — manual, main only]
 ```
 
 O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de segurança:
@@ -93,10 +95,10 @@ O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de seguran
 
 ### Stage 3: Build
 
-- **Ferramenta:** Docker (Docker-in-Docker)
+- **Ferramenta:** Docker (Docker-in-Docker) com BuildKit habilitado
 - **O que faz:** Constrói a imagem Docker usando o Dockerfile com multi-stage build e faz push para o GitLab Container Registry com duas tags: commit SHA e `latest`
 - **Critério de falha:** Job falha se o build ou push falhar
-- **Quando roda:** Na branch main automaticamente; em MRs apenas manual
+- **Quando roda:** Na branch main automaticamente; em MRs apenas manual (sem `allow_failure` — se alguém dispara manualmente, o resultado importa)
 - **Variáveis utilizadas:** `$CI_REGISTRY`, `$CI_REGISTRY_USER`, `$CI_REGISTRY_PASSWORD` (predefinidas pelo GitLab)
 
 ### Stage 4: Deploy
@@ -110,6 +112,7 @@ O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de seguran
 Cache compartilhado entre jobs, key baseada no hash do `requirements.txt` + prefixo por job name. Isso garante que:
 - Cache é invalidado automaticamente quando as dependências mudam
 - Cada job tem seu próprio namespace de cache (ruff e pytest não se contaminam)
+- O cache de ruff não é invalidado por mudanças no pytest, e vice-versa
 
 ### Prevenção de Pipelines Duplicados
 
@@ -126,20 +129,20 @@ Isso evita o problema comum de pipelines duplicados (um do MR event, outro do br
 
 ```
 .
-├── app.py              # Aplicação Flask
-├── test_app.py         # Testes unitários
-├── requirements.txt    # Dependências Python
-├── Dockerfile          # Containerização com multi-stage build
-├── docker-compose.yml  # Compose para rodar localmente
-├── healthcheck.sh      # Script de verificação de saúde (shell puro, sem python)
-├── .gitlab-ci.yml      # Pipeline CI/CD
-├── .dockerignore       # Arquivos ignorados no build Docker
-├── .gitignore          # Arquivos ignorados pelo Git
+├── app.py                  # Aplicação Flask
+├── test_app.py             # Testes unitários
+├── requirements.txt        # Dependências Python
+├── Dockerfile              # Containerização com multi-stage build
+├── docker-compose.yml      # Compose para rodar localmente
+├── healthcheck.sh          # Script de verificação de saúde (shell puro, sem python)
+├── .gitlab-ci.yml          # Pipeline CI/CD
+├── .dockerignore           # Arquivos ignorados no build Docker
+├── .gitignore              # Arquivos ignorados pelo Git
 └── terraform/
-    ├── main.tf         # Provider AWS e backend S3
-    ├── variables.tf    # Variáveis do Terraform
-    ├── ecs.tf          # Recursos ECS, ALB, IAM, CloudWatch, Security Groups
-    └── outputs.tf      # Outputs da infraestrutura
+    ├── main.tf             # Provider AWS e backend S3
+    ├── variables.tf        # Variáveis do Terraform
+    ├── ecs.tf              # Recursos ECS, ALB, IAM, CloudWatch, Security Groups
+    └── outputs.tf          # Outputs da infraestrutura
 ```
 
 ---
@@ -154,9 +157,13 @@ Separação entre ambiente de build (com pip, cache de downloads) e runtime (ape
 
 Alpine (~50MB base) vs slim (~120MB base). Para uma API Flask simples sem dependências nativas, Alpine é suficiente. Menos pacotes = menor superfície de ataque.
 
+### BuildKit Cache Mounts
+
+O Dockerfile usa `--mount=type=cache,target=/root/.cache/pip` no `pip install` do builder. Isso permite que o Docker reutilize o cache de downloads do pip entre builds, mesmo que a camada de requirements.txt seja invalidada por outros motivos. Requer `DOCKER_BUILDKIT=1` (habilitado no pipeline CI).
+
 ### Usuário Não-root
 
-Container roda como `appuser`. Se um atacante comprometer a aplicação, terá acesso limitado — sem privilégios de root. O ECS task definition também especifica `"user": "appuser"` para garantir que o runtime respeite isso.
+Container roda como `appuser`. Se um atacante comprometer a aplicação, terá acesso limitado — sem privilícios de root. O ECS task definition também especifica `"user": "appuser"` para garantir que o runtime respeite isso.
 
 ### Healthcheck — Validação de HTTP 200 + corpo
 
@@ -192,7 +199,7 @@ O script de healthcheck externo usa apenas `wget` e `grep`, sem dependência de 
 
 1. **VPC dedicada com subnets privadas** — A configuração atual usa a VPC default com subnets públicas. Em produção, os containers ECS rodariam em subnets privadas, acessíveis apenas via ALB nas subnets públicas. Isso elimina a necessidade do workaround de security groups (embora as SGs separadas já mitiguem o risco).
 
-2. **Pipeline de deploy real** — Implementaria deploy efetivo no ECS com AWS CLI, incluindo rollback automático se o health check pós-deploy falhar (Circuit Breaker do ECS + verificação manual do target health).
+2. **Pipeline de deploy real** — Implementaria deploy efetivo no ECS com AWS CLI, incluindo rollback automático se o health check pós-deploy falhar ( Circuit Breaker do ECS + verificação manual do target health).
 
 3. **Staging environment** — Environment de staging que recebe deploy automático a cada merge na main, antes do deploy em produção.
 
@@ -268,7 +275,7 @@ Utilizei o **opencode** (CLI de IA para engenharia de software) com o modelo **G
 
 ### O que pedi a IA
 
-1. **Dockerfile** — Geração inicial com multi-stage build, usuário não-root e healthcheck. O resultado foi bom, mas o healthcheck apenas verificava conectividade sem validar o HTTP status code — eu corrigi para checar `assert r.status==200`.
+1. **Dockerfile** — Geração inicial com multi-stage build, usuário não-root e healthcheck. O resultado foi bom, mas o healthcheck apenas verificava conectividade sem validar o HTTP status code — eu corrigi para checar `assert r.status==200`. Também adicionei BuildKit cache mounts que a versão inicial não usava.
 
 2. **App.py** — O código fornecido pelo desafio usava `datetime.utcnow()`, que está deprecated desde Python 3.12. Substituí por `datetime.now(timezone.utc)` que retorna timestamps timezone-aware, alinhado com as recomendações da PEP 685.
 

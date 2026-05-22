@@ -90,6 +90,7 @@ sast:
 # =============================================================================
 # STAGE: BUILD — Docker image → GitLab Container Registry
 # =============================================================================
+# Uses DOCKER_BUILDKIT for --mount=type=cache in Dockerfile
 build:
   stage: build
   image: docker:24-dind
@@ -97,6 +98,7 @@ build:
     - docker:24-dind
   variables:
     DOCKER_HOST: tcp://docker:2376
+    DOCKER_BUILDKIT: "1"
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
