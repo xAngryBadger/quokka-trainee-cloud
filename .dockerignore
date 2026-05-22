@@ -20,3 +20,5 @@ README.md
 .pytest_cache/
 bandit-report.json
 ruff.toml
+.ruff_cache/
+requirements-dev.txt

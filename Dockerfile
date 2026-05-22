@@ -37,8 +37,9 @@ USER appuser
 
 EXPOSE 5000
 
-# Healthcheck validates both connectivity AND HTTP 200 —
-# urlopen alone doesn't catch 5xx responses
+# Healthcheck validates HTTP 200 explicitly — assert is defense-in-depth
+# since urlopen raises HTTPError on 5xx, but the assert makes intent clear
+# and catches edge cases where the exception might be suppressed.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; r=urllib.request.urlopen('http://localhost:5000/health'); assert r.status==200" || exit 1
 

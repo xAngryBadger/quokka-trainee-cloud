@@ -138,8 +138,11 @@ quokka/
 ├── test_app.py               # Pytest unit tests: test_health verifies /health returns 200 + status=healthy,
 │                             # test_index verifies / returns 200. Uses Flask test_client — no HTTP server needed.
 │
-├── requirements.txt          # Two pinned dependencies: flask==3.0.0 (runtime), pytest==7.4.3 (test).
-│                             # Minimal surface — no transitive dev dependencies in production image.
+├── requirements.txt          # Runtime dependency only: flask==3.0.0. Installed by Dockerfile — no
+│                             # pytest/ruff/bandit in the production image. Minimizes attack surface.
+│
+├── requirements-dev.txt     # Development dependencies: pytest, ruff, bandit. Used by CI jobs and local
+│                             # testing. Excluded from Docker build via .dockerignore.
 │
 ├── ruff.toml                 # Linter configuration: selects E/W/F/I/UP/B/SIM/C4/S rule categories,
 │                             # targets Python 3.12, ignores S101 (assert in tests), sets isort known-first-party.
@@ -377,7 +380,8 @@ Use this checklist to verify every deliverable against the challenge PDF:
 - [ ] `app.py` has `/` endpoint returning JSON welcome message
 - [ ] `app.py` uses timezone-aware timestamps (not deprecated `utcnow()`)
 - [ ] `test_app.py` has unit tests for both endpoints
-- [ ] `requirements.txt` has pinned versions for flask and pytest
+- [ ] `requirements.txt` has only runtime deps (flask)
+- [ ] `requirements-dev.txt` has dev/test deps (pytest, ruff, bandit)
 - [ ] `ruff.toml` defines explicit lint rules (not bare defaults)
 
 ### Docker
@@ -387,20 +391,21 @@ Use this checklist to verify every deliverable against the challenge PDF:
 - [ ] `Dockerfile` has HEALTHCHECK that validates HTTP 200 (not just connectivity)
 - [ ] `Dockerfile` uses BuildKit cache mount for pip downloads
 - [ ] `docker-compose.yml` mirrors Dockerfile healthcheck
-- [ ] `.dockerignore` excludes tests, terraform, CI config, ruff.toml, README
+- [ ] `.dockerignore` excludes tests, terraform, CI config, ruff.toml, README, requirements-dev.txt, .ruff_cache
 
 ### CI/CD Pipeline
 - [ ] `.gitlab-ci.yml` has 4 stages: lint, test, build, deploy
 - [ ] Lint job uses ruff with explicit config
 - [ ] Test job uses pytest
-- [ ] SAST job uses bandit (bonus) with `allow_failure: true` and JSON artifact
+- [ ] SAST job uses bandit (bonus) with `allow_failure: true` (non-blocking by design) and JSON artifact
 - [ ] Build job uses Docker-in-Docker with BuildKit enabled
 - [ ] Build pushes to GitLab Container Registry with SHA + latest tags
-- [ ] Build on main is automatic; on MR is manual
+- [ ] Build on main and tags is automatic; on MR is manual
+- [ ] Tags produce release images (tag name as image tag)
 - [ ] Deploy is main-only with `when: manual`
 - [ ] Deploy has `needs: [build]`
 - [ ] `workflow.rules` prevent duplicate pipelines
-- [ ] Cache is keyed on requirements.txt hash + job name prefix
+- [ ] Cache is keyed on requirements.txt + requirements-dev.txt hash + job name prefix
 
 ### Terraform
 - [ ] `main.tf` configures AWS provider with S3 backend + DynamoDB locking
@@ -482,3 +487,23 @@ Adicionada nota no README sobre runners self-hosted.
 `urllib.request.urlopen()` ja levanta `HTTPError` em 4xx/5xx, entao a assertiva
 nao eh a unica protecao contra falso positivo.
 **CORRIGIDO:** README e DOSSIE atualizados — assert e defense-in-depth, nao unica protecao.
+
+### Auditoria round 2 (Gemini, May 22, 2026)
+
+6) ~~**LOW** — Runtime image ships pytest because requirements.txt is installed wholesale.~~
+**CORRIGIDO:** Split into requirements.txt (runtime: flask) + requirements-dev.txt (dev: pytest, ruff, bandit).
+Dockerfile installs only requirements.txt. .dockerignore excludes requirements-dev.txt.
+
+7) ~~**LOW** — Dockerfile healthcheck comment still says "urlopen alone doesn't catch 5xx".~~
+**CORRIGIDO:** Comment updated to "assert is defense-in-depth since urlopen raises HTTPError on 5xx."
+
+8) ~~**LOW** — .ruff_cache/ can leak into git status and Docker build context.~~
+**CORRIGIDO:** Added .ruff_cache/ to .gitignore and .dockerignore.
+
+9) **LOW** — SAST does not gate the pipeline (allow_failure: true).
+**DECISAO DOCUMENTADA:** Non-blocking by design. For new projects, blocking on SAST risks false positives
+halting deploys. README now explains the trade-off. In production, consider gating on HIGH severity.
+
+10) ~~**LOW** — Tags enabled in workflow.rules but build job never runs on tags.~~
+**CORRIGIDO:** Build job now has `if: $CI_COMMIT_TAG` rule. Tags produce images with tag name
+(e.g., v1.0.0) as additional image tag.

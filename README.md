@@ -52,7 +52,7 @@ chmod +x healthcheck.sh
 ### Rodar os testes localmente
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-dev.txt
 pytest test_app.py -v
 ```
 
@@ -91,8 +91,8 @@ O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de seguran
 
 - **Ferramenta:** `bandit`
 - **O que faz:** Análise estática de segurança no código Python, identificando vulnerabilidades comuns
-- **Critério de falha:** `allow_failure: true` — o job reporta findings mas não bloqueia o pipeline. Findings de severidade HIGH são mostrados no output para revisão manual
-- **Quando roda:** Na branch main e em MRs
+- **Critério de falha:** `allow_failure: true` por design — SAST surface findings sem bloquear deploys. Para projetos novos, bloquear por SAST arrisca falsos positivos travando o pipeline. Em produção, considerar gating em severidade HIGH após afinar exclusões.
+- **Quando roda:** Na branch main, em MRs e em tags
 - **Artefato:** Gera `bandit-report.json` para análise posterior
 
 ### Stage 3: Build
@@ -100,7 +100,7 @@ O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de seguran
 - **Ferramenta:** Docker (Docker-in-Docker) com BuildKit habilitado
 - **O que faz:** Constrói a imagem Docker usando o Dockerfile com multi-stage build e faz push para o GitLab Container Registry com duas tags: commit SHA e `latest`
 - **Critério de falha:** Job falha se o build ou push falhar
-- **Quando roda:** Na branch main automaticamente; em MRs apenas manual (sem `allow_failure` — se alguém dispara manualmente, o resultado importa)
+- **Quando roda:** Na branch main e em tags automaticamente; em MRs apenas manual (sem `allow_failure` — se alguém dispara manualmente, o resultado importa). Tags produzem imagens com o nome da tag (ex: `v1.0.0`).
 - **Variáveis utilizadas:** `$CI_REGISTRY`, `$CI_REGISTRY_USER`, `$CI_REGISTRY_PASSWORD` (predefinidas pelo GitLab)
 - **Nota TLS:** O job define `DOCKER_TLS_CERTDIR` e `DOCKER_HOST` conforme documentação GitLab. Runners compartilhados injetam `DOCKER_TLS_VERIFY` e `DOCKER_CERT_PATH` automaticamente. Em runners self-hosted com TLS estrito, pode ser necessário definir essas variáveis explicitamente.
 
@@ -134,7 +134,8 @@ Isso evita o problema comum de pipelines duplicados (um do MR event, outro do br
 .
 ├── app.py              # Aplicação Flask
 ├── test_app.py         # Testes unitários
-├── requirements.txt    # Dependências Python
+├── requirements.txt    # Dependências Python (runtime apenas)
+├── requirements-dev.txt # Dependências de desenvolvimento (pytest, ruff, bandit)
 ├── ruff.toml           # Configuração do linter
 ├── Dockerfile          # Containerização com multi-stage build
 ├── docker-compose.yml  # Compose para rodar localmente
@@ -184,6 +185,14 @@ Isso impede bypass do ALB. Em ECS com `awsvpc` network mode, tasks recebem seus 
 ### Linter — ruff em vez de flake8
 
 Ruff é 10-100x mais rápido que flake8, tem regras compatíveis e é o padrão moderno da comunidade Python. Em um pipeline CI/CD, velocidade importa. O arquivo `ruff.toml` configura as regras explicitamente: `E/W` (pycodestyle), `F` (pyflakes), `I` (isort), `UP` (pyupgrade para 3.12+), `B` (bugbear), `SIM` (simplify), `C4` (comprehensions) e `S` (bandit security). Rodar ruff sem config é aceitar defaults cegos — o `ruff.toml` documenta o que consideramos erro e por quê.
+
+### Dependências — Runtime vs Desenvolvimento
+
+`requirements.txt` contém apenas dependências de runtime (flask). `requirements-dev.txt` adiciona pytest, ruff e bandit. O Dockerfile instala apenas `requirements.txt`, excluindo ferramentas de teste da imagem de produção. Isso reduz a superfície de ataque — pytest, ruff e bandit não deveriam existir em um container que serve tráfego.
+
+### SAST — Não-bloqueante por design
+
+O job de SAST usa `allow_failure: true` intencionalmente. Para projetos novos, bloquear o pipeline por findings de SAST arrisca falsos positivos travando deploys. O scan reporta findings de severidade HIGH no log e gera artefato JSON para revisão manual. Em produção, após afinar exclusões, considerar gating em HIGH severity.
 
 ### readonlyRootFilesystem — Container imutável
 
