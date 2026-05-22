@@ -2,7 +2,8 @@
 # Stage 1: Builder — dependency install isolated from runtime
 # Separating install from runtime means the final image excludes
 # pip cache, build tools, and any transitive build artifacts.
-FROM python:3.12-alpine AS builder
+# Pinning to specific Alpine version for reproducibility and supply-chain security
+FROM python:3.12.7-alpine3.20 AS builder
 
 WORKDIR /build
 
@@ -16,7 +17,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 
 # Stage 2: Runtime — minimal image, non-root, hardened
-FROM python:3.12-alpine
+# Pinning to specific Alpine version for reproducibility and supply-chain security
+FROM python:3.12.7-alpine3.20
 
 LABEL maintainer="Trainee Cloud & IA"
 LABEL description="API Flask — Health Check para pipeline CI/CD"
@@ -37,10 +39,9 @@ USER appuser
 
 EXPOSE 5000
 
-# Healthcheck validates HTTP 200 explicitly — assert is defense-in-depth
-# since urlopen raises HTTPError on 5xx, but the assert makes intent clear
-# and catches edge cases where the exception might be suppressed.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; r=urllib.request.urlopen('http://localhost:5000/health'); assert r.status==200" || exit 1
+# Use Gunicorn production WSGI server with 2 workers, 4 threads each
+# More robust than Flask dev server for concurrent requests
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD python -c "import urllib.request; r=urllib.request.urlopen('http://localhost:5000/health'); assert r.status==200" || exit 1
 
-CMD ["python", "app.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "app:app"]

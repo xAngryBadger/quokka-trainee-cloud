@@ -39,6 +39,7 @@ resource "aws_security_group" "alb_sg" {
 }
 
 # SG do ECS: aceita trafego apenas do ALB na porta do container
+# Egress restrito para CloudWatch Logs, ECR, e DNS
 resource "aws_security_group" "ecs_sg" {
   name        = "${var.app_name}-ecs-sg"
   description = "ECS task security group — aceita trafego apenas do ALB"
@@ -51,11 +52,28 @@ resource "aws_security_group" "ecs_sg" {
     security_groups = [aws_security_group.alb_sg.id]
   }
 
+  # CloudWatch Logs (HTTPS)
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # ECR (HTTPS) - para pull da imagem
+  egress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # DNS (UDP) - VPC DNS resolver
+  egress {
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = ["10.0.0.0/8"]
   }
 
   tags = {

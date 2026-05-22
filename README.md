@@ -174,9 +174,27 @@ Container roda como `appuser`. Se um atacante comprometer a aplicação, terá a
 
 ### Servidor de Desenvolvimento Flask
 
-A aplicação usa `app.run()` (Flask built-in server) em vez de um servidor production-grade como Gunicorn ou Waitress. Para este desafio de trainee, é aceitável — o foco é demonstrar CI/CD, containerização e IaC, não tuning de performance.
+**ATUALIZADO:** O Dockerfile agora usa Gunicorn como WSGI server production-grade.
 
-**Limitações:** single-threaded, sem worker management, sem timeout handling, não testado em produção em larga escala. Para produção, substitua por Gunicorn (`gunicorn app:app --workers 4 --bind 0.0.0.0:5000`) e atualize o Dockerfile CMD.
+O código original usava `app.run()` (Flask built-in server), que é single-threaded, sem worker management, sem timeout handling, não testado em produção em larga escala. Para produção, o Dockerfile foi atualizado para usar Gunicorn com 2 workers e 4 threads:
+
+```dockerfile
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "app:app"]
+```
+
+### Limitações de Treinamento (Não Producao)
+
+Este projeto é um **desafio de trainee** com limitações intencionais para focar em CI/CD e IaC:
+
+1. **VPC Default** — Usa a VPC default da AWS com subnets públicas. Produção exigiria VPC dedicada com subnets privadas + NAT Gateway (~$32/mês). Esta escolha é documentada como fora do escopo do trainee.
+
+2. **HTTP sem TLS** — O ALB usa apenas HTTP (porta 80). Produção exigiria HTTPS com certificado ACM + redirect HTTP→HTTPS. Requer domínio verificado.
+
+3. **NAT Gateway ausente** — ECS tasks usam `assign_public_ip=true` para evitar custo de NAT Gateway. Produção usaria subnets privadas com NAT.
+
+4. **Sem auto-scaling** — Fixed desired_count=2. Produção configuraria auto-scaling baseado em CPU/memória.
+
+5. **Sem WAF** — Application Load Balancer sem AWS WAF. Produção exigiria WAF para proteção contra OWASP Top 10.
 
 ### Healthcheck — Validação de HTTP 200 + corpo
 

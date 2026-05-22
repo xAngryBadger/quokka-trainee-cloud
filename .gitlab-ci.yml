@@ -8,6 +8,7 @@
 stages:
   - lint
   - test
+  - validate-infra
   - build
   - deploy
 
@@ -86,6 +87,45 @@ sast:
       - bandit-report.json
     when: always
   allow_failure: true
+
+# =============================================================================
+# STAGE: VALIDATE INFRA — Terraform fmt/validate/plan
+# =============================================================================
+# Ensures Terraform code is properly formatted and syntactically valid
+# before any apply. Plan output posted as MR comment for review.
+terraform-validate:
+  stage: validate-infra
+  image: hashicorp/terraform:1.8
+  variables:
+    TF_IN_AUTOMATION: yes
+  before_script:
+    - terraform init -backend=false
+  script:
+    - terraform fmt -check -recursive
+    - terraform validate
+    - echo "Terraform validation passed"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+terraform-plan:
+  stage: validate-infra
+  image: hashicorp/terraform:1.8
+  variables:
+    TF_IN_AUTOMATION: yes
+  before_script:
+    - terraform init -backend=false
+  script:
+    - terraform plan -out=tfplan
+    - terraform show -no-color tfplan | tee tfplan.txt
+  artifacts:
+    paths:
+      - tfplan.txt
+    reports:
+      terraform: tfplan.json
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # =============================================================================
 # STAGE: BUILD — Docker image → GitLab Container Registry

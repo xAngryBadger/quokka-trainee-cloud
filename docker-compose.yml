@@ -7,9 +7,10 @@ services:
     ports:
       - "5000:5000"
     healthcheck:
+      # Gunicorn healthcheck with extended start period for worker initialization
       test: ["CMD", "python", "-c", "import urllib.request; r=urllib.request.urlopen('http://localhost:5000/health'); assert r.status==200"]
       interval: 30s
       timeout: 5s
-      start_period: 10s
+      start_period: 15s
       retries: 3
     restart: unless-stopped
