@@ -184,17 +184,35 @@ CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "
 
 ### Limitações de Treinamento (Não Producao)
 
-Este projeto é um **desafio de trainee** com limitações intencionais para focar em CI/CD e IaC:
+Este projeto é um **desafio de trainee** com limitações intencionais para focar em CI/CD e IaC. Abaixo, o que **NÃO** foi implementado e o porquê:
 
-1. **VPC Default** — Usa a VPC default da AWS com subnets públicas. Produção exigiria VPC dedicada com subnets privadas + NAT Gateway (~$32/mês). Esta escolha é documentada como fora do escopo do trainee.
+#### Requer AWS com Cartão de Crédito (fora do escopo trainee):
 
-2. **HTTP sem TLS** — O ALB usa apenas HTTP (porta 80). Produção exigiria HTTPS com certificado ACM + redirect HTTP→HTTPS. Requer domínio verificado.
+1. **VPC Default** — Usa a VPC default da AWS com subnets públicas. Produção exigiria VPC dedicada com subnets privadas + NAT Gateway (~$32/mês + transfer). Esta escolha é documentada como fora do escopo.
 
-3. **NAT Gateway ausente** — ECS tasks usam `assign_public_ip=true` para evitar custo de NAT Gateway. Produção usaria subnets privadas com NAT.
+2. **HTTP sem TLS** — O ALB usa apenas HTTP (porta 80). Produção exigiria HTTPS com certificado ACM (grátis) mas que requer domínio verificado (custo anual de domínio).
 
-4. **Sem auto-scaling** — Fixed desired_count=2. Produção configuraria auto-scaling baseado em CPU/memória.
+3. **NAT Gateway ausente** — ECS tasks usam `assign_public_ip=true` para evitar custo de NAT Gateway (~$32/mês). Produção usaria subnets privadas com NAT.
 
-5. **Sem WAF** — Application Load Balancer sem AWS WAF. Produção exigiria WAF para proteção contra OWASP Top 10.
+4. **Sem WAF** — Application Load Balancer sem AWS WAF (~$5/mês + regras). Produção exigiria WAF para proteção contra OWASP Top 10.
+
+5. **Log retention curto** — CloudWatch Logs com retenção de 7 dias. Produção exigiria 90+ dias (custo de armazenamento).
+
+6. **Sem multi-AZ** — Deploy em única zona de disponibilidade. Produção exigiria multi-AZ para disaster recovery (2x custo).
+
+7. **Sem auto-scaling** — Fixed desired_count=2. Produção configuraria auto-scaling baseado em CPU/memória (custo variável).
+
+#### Não Requer Cartão de Crédito (mas fora do escopo do desafio):
+
+8. **Sem rate limiting** — Sem proteção contra DoS/brute force. Poderia usar `flask-limiter` sem custo adicional.
+
+9. **Sem image scanning** — Sem Trivy/Grype no pipeline. Poderia ser adicionado gratuitamente.
+
+10. **Sem S3 state encryption** — Terraform state backend sem criptografia explícita. Deveria usar KMS/SSE.
+
+11. **Sem CloudWatch Alarms** — Sem alertas para falhas de health check, latência, erros 5xx.
+
+12. **Sem testes de integração** — Apenas testes unitários; sem validação end-to-end do container.
 
 ### Healthcheck — Validação de HTTP 200 + corpo
 
