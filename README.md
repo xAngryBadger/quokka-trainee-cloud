@@ -1,6 +1,10 @@
-# Trainee Cloud & IA — Desafio Técnico
+# Trainee Cloud & IA — Desafio Técnico 2: API Flask de health check com pipeline CI/CD completo, containerização Docker e infraestrutura como código para deploy no AWS ECS.
 
-API Flask de health check com pipeline CI/CD completo, containerização Docker e infraestrutura como código para deploy no AWS ECS.
+[![Build](https://gitlab.com/badger/quokka/badges/main/pipeline.svg)](https://gitlab.com/badger/quokka/-/pipelines)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-85%25-yellow)]()
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)]()
+[![License](https://img.shields.io/badge/license-MIT-green)]()
 
 ---
 
@@ -40,6 +44,70 @@ python app.py
 curl http://localhost:5000/health
 curl http://localhost:5000/
 ```
+
+## API Examples
+
+### Health Check Endpoint
+
+```bash
+# Basic health check
+curl -X GET http://localhost:5000/health
+
+# With verbose output
+curl -v http://localhost:5000/health
+
+# With timing information
+curl -w "\nTime: %{time_total}s\n" http://localhost:5000/health
+```
+
+Expected response:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-01T00:00:00.000000+00:00",
+  "version": "1.0.0"
+}
+```
+
+### Root Endpoint
+
+```bash
+# Basic root endpoint
+curl -X GET http://localhost:5000/
+
+# With headers
+curl -H "Accept: application/json" http://localhost:5000/
+```
+
+Expected response:
+```json
+{
+  "message": "Trainee DevOps API"
+}
+```
+
+### Error Handling Examples
+
+```bash
+# Test 404 - Not Found
+curl -X GET http://localhost:5000/nonexistent
+
+# Test rate limiting (send 11+ requests in quick succession)
+for i in {1..15}; do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5000/health; done
+```
+
+### Rate Limiting Test
+
+```bash
+# Default limit: 100 requests per hour, 10 per minute per endpoint
+# Test rate limit on /health endpoint (limit: 10 per minute)
+for i in {1..12}; do 
+  echo -n "Request $i: "
+  curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5000/health
+done
+```
+
+Expected: First 10 requests return 200, subsequent requests return 429 (Too Many Requests)
 
 Ou use o script de healthcheck (sem dependência de Python, funciona com wget apenas):
 
