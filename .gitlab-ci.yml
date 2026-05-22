@@ -2,7 +2,7 @@
 # Pipeline CI/CD — Trainee Cloud & IA
 # =============================================================================
 # 4 stages (lint → test → build → deploy) + bonus SAST in test stage
-# Docker-in-Docker for image build; deploy only on main
+# Docker-in-Docker for image build; deploy only on main with manual gate
 # =============================================================================
 
 stages:
@@ -10,6 +10,13 @@ stages:
   - test
   - build
   - deploy
+
+# Prevent duplicate pipelines — only MR pipelines and main branch pipelines run
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
 
 # -----------------------------------------------------------------------------
 # Global variables
@@ -21,6 +28,8 @@ variables:
 
 # -----------------------------------------------------------------------------
 # Cache — keyed on requirements.txt so it invalidates only when deps change
+# Ruff and bandit are NOT in requirements.txt, so they get their own cache key
+# suffix via per-job variable overrides.
 # -----------------------------------------------------------------------------
 .cache_template: &cache_config
   cache:
@@ -59,6 +68,10 @@ test:
 # =============================================================================
 # STAGE: SAST (bonus) — bandit security scan
 # =============================================================================
+# Bandit runs a full scan (JSON report) and a high-severity text output.
+# allow_failure=true means findings don't block the pipeline, but the
+# JSON artifact enables manual review and the text output surfaces HIGH
+# issues in the job log for visibility.
 sast:
   stage: test
   image: python:3.12-alpine
@@ -66,8 +79,8 @@ sast:
   before_script:
     - pip install --cache-dir=.pip-cache bandit
   script:
-    - bandit -r app.py -f json -o bandit-report.json || true
-    - bandit -r app.py -f txt || true
+    - bandit -r app.py -f json -o bandit-report.json
+    - bandit -r app.py -f txt --severity-level high
   artifacts:
     paths:
       - bandit-report.json
@@ -90,11 +103,17 @@ build:
     - docker build -t "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" -t "$DOCKER_IMAGE_NAME:latest" .
     - docker push "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
     - docker push "$DOCKER_IMAGE_NAME:latest"
-  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
 
 # =============================================================================
-# STAGE: DEPLOY — simulated ECS deploy (main only)
+# STAGE: DEPLOY — simulated ECS deploy (main only, manual gate)
 # =============================================================================
+# In a real pipeline, aws-cli would be installed and these commands would
+# actually execute. For this simulation we echo them to demonstrate the
+# deployment flow without installing unnecessary packages.
 deploy:
   stage: deploy
   image: alpine:3.19
@@ -118,3 +137,6 @@ deploy:
     name: production
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  needs:
+    - build

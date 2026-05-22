@@ -37,7 +37,7 @@ curl http://localhost:5000/health
 curl http://localhost:5000/
 ```
 
-Ou use o script de healthcheck:
+Ou use o script de healthcheck (sem dependência de Python, funciona com wget apenas):
 
 ```bash
 chmod +x healthcheck.sh
@@ -56,6 +56,17 @@ pytest test_app.py -v
 
 ## Como o Pipeline Funciona
 
+### Fluxo Visual
+
+```mermaid
+graph LR
+  A[Push / MR] --> B[Lint — ruff]
+  B --> C[Test — pytest]
+  B --> D[SAST — bandit]
+  C --> E[Build — docker push]
+  E --> F[Deploy — manual, main only]
+```
+
 O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de segurança:
 
 ### Stage 1: Lint
@@ -63,29 +74,51 @@ O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de seguran
 - **Ferramenta:** `ruff` — linter Python moderno, 10-100x mais rápido que flake8
 - **O que faz:** Analisa `app.py` e `test_app.py` buscando erros de estilo, imports não utilizados e más práticas
 - **Critério de falha:** Job falha se o ruff encontrar qualquer violação
+- **Quando roda:** Em MRs e na branch main (controlado por `workflow.rules` para evitar pipelines duplicados)
 
 ### Stage 2: Test
 
 - **Ferramenta:** `pytest`
 - **O que faz:** Executa os testes unitários em `test_app.py` validando os endpoints `/health` e `/`
 - **Critério de falha:** Job falha se qualquer teste não passar
+- **Quando roda:** Em MRs e na branch main
 
 ### Stage 2 (bonus): SAST — Security Scan
 
 - **Ferramenta:** `bandit`
-- **O que faz:** Análise estática de segurança no código Python
+- **O que faz:** Análise estática de segurança no código Python, identificando vulnerabilidades comuns
+- **Critério de falha:** `allow_failure: true` — o job reporta findings mas não bloqueia o pipeline. Findings de severidade HIGH são mostrados no output para revisão manual
+- **Quando roda:** Na branch main e em MRs
 - **Artefato:** Gera `bandit-report.json` para análise posterior
 
 ### Stage 3: Build
 
 - **Ferramenta:** Docker (Docker-in-Docker)
-- **O que faz:** Constrói a imagem Docker e faz push para o GitLab Container Registry
+- **O que faz:** Constrói a imagem Docker usando o Dockerfile com multi-stage build e faz push para o GitLab Container Registry com duas tags: commit SHA e `latest`
+- **Critério de falha:** Job falha se o build ou push falhar
+- **Quando roda:** Na branch main automaticamente; em MRs apenas manual
 - **Variáveis utilizadas:** `$CI_REGISTRY`, `$CI_REGISTRY_USER`, `$CI_REGISTRY_PASSWORD` (predefinidas pelo GitLab)
 
 ### Stage 4: Deploy
 
 - **O que faz:** Simula o deploy no AWS ECS imprimindo os comandos que seriam executados
-- **Quando roda:** Apenas na branch `main`
+- **Quando roda:** Apenas na branch `main`, com aprovação manual (`when: manual`)
+- **Dependência:** Aguarda o stage de build completar (`needs: [build]`)
+
+### Cache do Pipeline
+
+Cache compartilhado entre jobs, key baseada no hash do `requirements.txt` + prefixo por job name. Isso garante que:
+- Cache é invalidado automaticamente quando as dependências mudam
+- Cada job tem seu próprio namespace de cache (ruff e pytest não se contaminam)
+
+### Prevenção de Pipelines Duplicados
+
+O bloco `workflow.rules` garante que pipelines só rodam em:
+1. Merge request events
+2. Pushes na branch main
+3. Tags
+
+Isso evita o problema comum de pipelines duplicados (um do MR event, outro do branch push) que desperdiça runner minutes.
 
 ---
 
@@ -98,14 +131,14 @@ O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de seguran
 ├── requirements.txt    # Dependências Python
 ├── Dockerfile          # Containerização com multi-stage build
 ├── docker-compose.yml  # Compose para rodar localmente
-├── healthcheck.sh      # Script de verificação de saúde
+├── healthcheck.sh      # Script de verificação de saúde (shell puro, sem python)
 ├── .gitlab-ci.yml      # Pipeline CI/CD
 ├── .dockerignore       # Arquivos ignorados no build Docker
 ├── .gitignore          # Arquivos ignorados pelo Git
 └── terraform/
     ├── main.tf         # Provider AWS e backend S3
     ├── variables.tf    # Variáveis do Terraform
-    ├── ecs.tf          # Recursos ECS, ALB, IAM, CloudWatch
+    ├── ecs.tf          # Recursos ECS, ALB, IAM, CloudWatch, Security Groups
     └── outputs.tf      # Outputs da infraestrutura
 ```
 
@@ -123,37 +156,57 @@ Alpine (~50MB base) vs slim (~120MB base). Para uma API Flask simples sem depend
 
 ### Usuário Não-root
 
-Container roda como `appuser`. Se um atacante comprometer a aplicação, terá acesso limitado — sem privilégios de root.
+Container roda como `appuser`. Se um atacante comprometer a aplicação, terá acesso limitado — sem privilégios de root. O ECS task definition também especifica `"user": "appuser"` para garantir que o runtime respeite isso.
+
+### Healthcheck — Validação de HTTP 200 + corpo
+
+O healthcheck não apenas verifica conectividade (`urlopen` lança exceção em erros de conexão), mas também valida que o HTTP status code é 200 (`assert r.status==200`). Sem isso, um 500 Internal Server Error passaria no healthcheck, já que `urlopen` só lança exceção em erros de conexão, não em status codes de erro.
+
+### Security Groups — Acesso ao container apenas via ALB
+
+Duas security groups separadas:
+- **ALB SG:** Aceita HTTP (porta 80) de `0.0.0.0/0` — ponto de entrada público
+- **ECS SG:** Aceita tráfego apenas do ALB SG na porta 5000 — containers não são acessíveis diretamente da internet
+
+Isso impede bypass do ALB. Em ECS com `awsvpc` network mode, tasks recebem seus próprios ENIs com IPs — sem essa restrição, qualquer um poderia atingir o container diretamente.
 
 ### Linter — ruff em vez de flake8
 
 Ruff é 10-100x mais rápido que flake8, tem regras compatíveis e é o padrão moderno da comunidade Python. Em um pipeline CI/CD, velocidade importa.
 
+### Deploy — Manual com `when: manual`
+
+Em produção, deploy deve ser intencional. Mesmo na branch main, o deploy exige aprovação humana. Previne deploys acidentais e permite verificação do build antes de promover.
+
 ### Terraform — Simplificado mas Funcional
 
-A configuração cria infraestrutura ECS completa (cluster, service, task definition, ALB com target group, security groups, IAM roles, CloudWatch logs). Usa a VPC default para simplificar, mas reconheço que em produção isso é inseguro (veja "O que faria diferente").
+A configuração cria infraestrutura ECS completa (cluster, service, task definition, ALB com target group, security groups separados, IAM roles, CloudWatch logs). Usa a VPC default para simplificar, mas reconheço que em produção isso é inseguro (veja "O que faria diferente").
+
+### Healthcheck.sh — Shell Puro
+
+O script de healthcheck externo usa apenas `wget` e `grep`, sem dependência de Python. Funciona em qualquer ambiente Alpine sem instalar pacotes adicionais, e pode ser usado em pipelines CI ou monitoramento externo.
 
 ---
 
 ## O Que Eu Faria Diferente com Mais Tempo
 
-1. **VPC dedicada com subnets privadas** — A configuração atual usa a VPC default com subnets públicas. Em produção, os containers ECS rodariam em subnets privadas, acessíveis apenas via ALB nas subnets públicas.
+1. **VPC dedicada com subnets privadas** — A configuração atual usa a VPC default com subnets públicas. Em produção, os containers ECS rodariam em subnets privadas, acessíveis apenas via ALB nas subnets públicas. Isso elimina a necessidade do workaround de security groups (embora as SGs separadas já mitiguem o risco).
 
-2. **Pipeline de deploy real** — Implementaria deploy efetivo no ECS com AWS CLI, incluindo rollback automático se o health check pós-deploy falhar.
+2. **Pipeline de deploy real** — Implementaria deploy efetivo no ECS com AWS CLI, incluindo rollback automático se o health check pós-deploy falhar (Circuit Breaker do ECS + verificação manual do target health).
 
 3. **Staging environment** — Environment de staging que recebe deploy automático a cada merge na main, antes do deploy em produção.
 
-4. **Auto-scaling** — Configuraria auto-scaling do ECS Service baseado em CPU e memória.
+4. **Auto-scaling** — Configuraria auto-scaling do ECS Service baseado em CPU e memória, com limites mínimos e máximos.
 
 5. **Container registry scanning** — Trivy ou ECR image scanning antes do deploy, bloqueando imagens com vulnerabilidades críticas.
 
-6. **Secrets management** — AWS Secrets Manager ou SSM Parameter Store para secrets.
+6. **Secrets management** — AWS Secrets Manager ou SSM Parameter Store para secrets, em vez de variáveis de ambiente diretas.
 
 7. **Monitoring e alerting** — CloudWatch Alarms para latência, erros 5xx e health check failures, com notificações via SNS.
 
-8. **Pipeline para o Terraform** — `terraform fmt -check`, `terraform validate` e `terraform plan` como jobs do pipeline.
+8. **Pipeline para o Terraform** — `terraform fmt -check`, `terraform validate` e `terraform plan` como jobs do pipeline, revisando mudanças de infraestrutura antes de aplicar. O `plan` seria postado como comentário no MR.
 
-9. **Testes de integração** — Testes que sobem o container Docker e fazem requests reais contra a API.
+9. **Testes de integração** — Testes que sobem o container Docker e fazem requests reais contra a API rodando dentro dele, validando o Dockerfile end-to-end.
 
 10. **HTTPS no ALB** — Adicionar certificado ACM + listener HTTPS (porta 443) com redirect HTTP→HTTPS.
 
@@ -198,6 +251,13 @@ terraform destroy
 | `memory` | `512` | Memória MiB (Fargate) |
 | `desired_count` | `2` | Número de tasks ECS |
 
+### Nota sobre GitLab Self-Hosted
+
+Em instâncias self-hosted do GitLab, o Container Registry pode não estar habilitado por padrão. Verifique:
+1. O registry está habilitado nas configurações do GitLab (`Settings → Container Registry`)
+2. As variáveis `$CI_REGISTRY`, `$CI_REGISTRY_USER`, `$CI_REGISTRY_PASSWORD` estão disponíveis (são injetadas automaticamente quando o registry está ativo)
+3. O runner tem permissão para fazer push no registry
+
 ---
 
 ## Como Usei IA Durante o Desafio
@@ -208,21 +268,33 @@ Utilizei o **opencode** (CLI de IA para engenharia de software) com o modelo **G
 
 ### O que pedi a IA
 
-1. **Dockerfile** — Geração inicial com multi-stage build, usuário não-root e healthcheck.
-2. **Pipeline CI/CD** — Geração da estrutura base do `.gitlab-ci.yml`.
-3. **Terraform para ECS** — Geração dos recursos principais.
-4. **Docker Compose e healthcheck.sh** — Geração dos arquivos auxiliares.
-5. **README** — Geração da estrutura de documentação.
+1. **Dockerfile** — Geração inicial com multi-stage build, usuário não-root e healthcheck. O resultado foi bom, mas o healthcheck apenas verificava conectividade sem validar o HTTP status code — eu corrigi para checar `assert r.status==200`.
+
+2. **App.py** — O código fornecido pelo desafio usava `datetime.utcnow()`, que está deprecated desde Python 3.12. Substituí por `datetime.now(timezone.utc)` que retorna timestamps timezone-aware, alinhado com as recomendações da PEP 685.
+
+3. **Pipeline CI/CD** — Geração da estrutura base do `.gitlab-ci.yml`. A IA gerou regras que causavam pipelines duplicados (MR event + branch push simultâneos) — eu adicionei `workflow.rules` para resolver. O SAST tinha `|| true` que tornava o scan inútil — corrigi para usar `--severity-level high`. O build em MRs tinha `allow_failure: true` que ocultava falhas — removi.
+
+4. **Terraform para ECS** — Geração dos recursos principais. A IA produziu um ARN de policy IAM com sintaxe inválida (`arn:aws:iam:::aws:policy/...` — um `:` a mais entre account e resource), outputs duplicados entre `ecs.tf` e `outputs.tf`, e um security group que abria a porta do container para `0.0.0.0/0` permitindo bypass do ALB. Corrigi todos os três problemas e separei as security groups em ALB SG e ECS SG.
+
+5. **Docker Compose e healthcheck.sh** — O healthcheck.sh inicial dependia de `python3` para parsear JSON, o que não é confiável em ambientes sem Python. Reescrevi usando `wget` + `grep` puro (shell).
+
+6. **README** — Geração da estrutura de documentação. A IA não incluiu instruções para rodar o Terraform, não mencionou considerações para GitLab Self-Hosted, e a seção de IA era genérica — reescrevi com exemplos específicos dos bugs que encontrei e corrigi.
 
 ### O que funcionou bem
 
-- **Boilerplate e scaffolding** — A IA é excelente para gerar a estrutura inicial de arquivos de configuração.
-- **Velocidade** — O que tomaria horas de pesquisa e escrita foi gerado em minutos.
+- **Boilerplate e scaffolding** — A IA é excelente para gerar a estrutura inicial de arquivos de configuração (Dockerfile, CI/CD, Terraform). Economizou horas de trabalho.
+- **Boas práticas automáticas** — Sem eu pedir explicitamente, a IA sugeriu multi-stage build, usuário não-root, healthcheck e cache no pipeline.
+- **Velocidade** — O que tomaria horas de pesquisa e escrita foi gerado em minutos, permitindo focar na revisão e correção.
 
 ### O que não funcionou tão bem
 
-- A gerar alguns detalhes específicos que precisei corrigir manualmente após revisão.
+- **Detalhes específicos de plataforma** — A IA gerou ARN IAM inválido, outputs duplicados no Terraform, e security groups que comprometiam a segurança do deploy ECS. Nenhum desses erros seria óbvio sem revisão manual cuidadosa.
+- **Healthcheck incompleto** — A IA gerou healthchecks que verificavam conectividade mas não validavam o HTTP status code. Um 500 passaria como "healthy."
+- **CI/CD com falsos negativos** — O SAST com `|| true`, o build com `allow_failure: true`, e pipelines duplicados são antipadrões que parecem funcionais mas subvertem o propósito do pipeline.
+- **Segurança por aparência** — A IA gerou arquivos que *pareciam* seguros (security groups, non-root user) mas com configurações que neutralizavam a proteção (porta aberta para o mundo, healthcheck sem validação real).
 
 ### Aprendizados
 
-- IA é uma aceleradora, não um substituto para revisão manual cuidadosa.
+- **IA é uma aceleradora, não um substituto para revisão.** Os erros mais críticos (IAM ARN, security group, healthcheck falso-positivo) pareciam corretos à primeira vista. Só a revisão linha a linha os encontrou.
+- **Teste tudo.** O healthcheck.sh falha silenciosamente se python3 não existe; o Terraform falha no plan por ARN inválido; o pipeline aprova builds quebrados. Nada disso é óbvio sem execução real.
+- **Documentar os erros da IA é mais valioso que documentar os acertos.** Mostra que você entende o código, não apenas copiou.

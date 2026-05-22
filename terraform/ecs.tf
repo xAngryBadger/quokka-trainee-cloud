@@ -13,22 +13,15 @@ data "aws_subnets" "default" {
   }
 }
 
-# Security group: aceita HTTP(80) da internet e permite trafego na porta do container
-resource "aws_security_group" "app_sg" {
-  name        = "${var.app_name}-sg"
-  description = "Security group para ALB e ECS"
+# SG do ALB: aceita HTTP(80) da internet, egress apenas para ECS SG
+resource "aws_security_group" "alb_sg" {
+  name        = "${var.app_name}-alb-sg"
+  description = "ALB security group — aceita trafego HTTP da internet"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
     from_port   = 80
     to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = var.container_port
-    to_port     = var.container_port
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -41,7 +34,32 @@ resource "aws_security_group" "app_sg" {
   }
 
   tags = {
-    Name = "${var.app_name}-sg"
+    Name = "${var.app_name}-alb-sg"
+  }
+}
+
+# SG do ECS: aceita trafego apenas do ALB na porta do container
+resource "aws_security_group" "ecs_sg" {
+  name        = "${var.app_name}-ecs-sg"
+  description = "ECS task security group — aceita trafego apenas do ALB"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    from_port       = var.container_port
+    to_port         = var.container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.app_name}-ecs-sg"
   }
 }
 
@@ -53,7 +71,7 @@ resource "aws_lb" "app" {
   name               = "${var.app_name}-alb"
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.app_sg.id]
+  security_groups    = [aws_security_group.alb_sg.id]
   subnets            = data.aws_subnets.default.ids
 }
 
@@ -128,7 +146,7 @@ resource "aws_iam_role" "ecs_task_execution" {
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   role       = aws_iam_role.ecs_task_execution.name
-  policy_arn = "arn:aws:iam:::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
 # =============================================================================
@@ -148,6 +166,7 @@ resource "aws_ecs_task_definition" "app" {
       name      = var.app_name
       image     = var.container_image
       essential = true
+      user      = "appuser"
 
       portMappings = [
         {
@@ -155,6 +174,8 @@ resource "aws_ecs_task_definition" "app" {
           protocol      = "tcp"
         }
       ]
+
+      readonlyRootFilesystem = false
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -166,7 +187,7 @@ resource "aws_ecs_task_definition" "app" {
       }
 
       healthCheck = {
-        command     = ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${var.container_port}/health')\" || exit 1"]
+        command     = ["CMD-SHELL", "python -c \"import urllib.request; r=urllib.request.urlopen('http://localhost:${var.container_port}/health'); assert r.status==200\" || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3
@@ -189,7 +210,7 @@ resource "aws_ecs_service" "app" {
 
   network_configuration {
     subnets         = data.aws_subnets.default.ids
-    security_groups = [aws_security_group.app_sg.id]
+    security_groups = [aws_security_group.ecs_sg.id]
   }
 
   load_balancer {
@@ -198,6 +219,7 @@ resource "aws_ecs_service" "app" {
     container_port   = var.container_port
   }
 
+  # O ALB e o listener precisam estar prontos antes do service registrar targets
   depends_on = [aws_lb_listener.http]
 
   lifecycle {
