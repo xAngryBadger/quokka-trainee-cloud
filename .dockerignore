@@ -22,3 +22,4 @@ bandit-report.json
 ruff.toml
 .ruff_cache/
 requirements-dev.txt
+DOSSIE.md

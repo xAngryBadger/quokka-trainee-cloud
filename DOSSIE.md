@@ -100,8 +100,14 @@ Day 2 (May 22, morning — review catches bugs)
 
 Day 2 (May 22, midday — final polish)
 ─────────────────────────────────────────────────
-12:00  9287b38  fix: readonlyRootFilesystem=true — container filesystem imutavel
-12:01  cfed349  feat: ruff.toml com regras explicitas + modernizacao app.py
+12:00 9287b38 fix: readonlyRootFilesystem=true — container filesystem imutavel
+12:01 cfed349 feat: ruff.toml com regras explicitas + modernizacao app.py
+
+Day 2 (May 22, afternoon — external audit fixes)
+─────────────────────────────────────────────────
+12:20 22019cc fix: auditoria externa — assign_public_ip, Python >=3.11, prompts, healthcheck docs
+12:35 a458516 fix: auditoria round 2 — split deps, healthcheck comment, ruff cache, tag builds
+12:50 ??????? fix: auditoria round 3 — YAML cache structure, pin dev deps, tag latest safety, ignores
 ```
 
 The v1 commits contain **intentional real bugs** (broken IAM ARN, single SG, `|| true` in SAST,
@@ -159,16 +165,17 @@ quokka/
 │                             # status code 200 and body contains "status":"healthy". Busybox-compatible (Alpine).
 │                             # Accepts optional HOST and PORT arguments for external monitoring.
 │
-├── .gitlab-ci.yml            # 4-stage pipeline (lint→test→build→deploy) + bonus SAST. workflow.rules prevent
-│                             # duplicate pipelines. Cache keyed on requirements.txt hash + job name prefix.
-│                             # Build on main auto, on MR manual. Deploy main-only, manual gate with needs:[build].
+├── .gitlab-ci.yml # 4-stage pipeline (lint→test→build→deploy) + bonus SAST. workflow.rules prevent
+│                             # duplicate pipelines. Cache keyed on requirements.txt + requirements-dev.txt
+│                             # hash + job name prefix. Build on main/tags auto, on MR manual. Tags produce
+│                             # release images. Deploy main-only, manual gate with needs:[build].
 │
-├── .dockerignore             # Excludes test_app.py, terraform/, .gitlab-ci.yml, healthcheck.sh, ruff.toml,
-│                             # README, .gitignore, venvs, __pycache__, bandit report from Docker build context.
-│                             # Reduces build context size and prevents secret/infra leak into image.
+├── .dockerignore # Excludes test_app.py, terraform/, .gitlab-ci.yml, healthcheck.sh, ruff.toml,
+│                             # requirements-dev.txt, DOSSIE.md, README, .gitignore, .ruff_cache, venvs,
+│                             # __pycache__, bandit report from Docker build context.
 │
-├── .gitignore                # Excludes __pycache__, .pyc/.pyo, .env, .venv, venv, egg-info, dist, build,
-│                             # .idea, .vscode. Standard Python ignores plus editor configs.
+├── .gitignore # Excludes __pycache__, .pyc/.pyo, .env, .venv, venv, egg-info, dist, build,
+│                             # .idea, .vscode, .ruff_cache, .pytest_cache, bandit-report.json.
 │
 └── terraform/
     ├── main.tf               # Provider config: AWS ~>5.0, region from variable, default tags (Project,
@@ -224,7 +231,7 @@ Map every challenge requirement to the file and line that satisfies it.
 | B2 | Terraform state management | `terraform/main.tf:11-16` | S3 backend + DynamoDB locking |
 | B3 | Health check script | `healthcheck.sh:1-32` | Shell-only, wget+grep, busybox-compatible |
 | B4 | Container security hardening | `Dockerfile:25,34-36` + `terraform/ecs.tf:169,178` | Non-root user + readonlyRootFilesystem |
-| B5 | Pipeline cache optimization | `.gitlab-ci.yml:34-42` | Keyed on requirements.txt hash + job name prefix |
+| B5 | Pipeline cache optimization | `.gitlab-ci.yml:34-43` | Keyed on requirements.txt + requirements-dev.txt hash + job name prefix |
 
 ### Linter Config (not explicitly required, but strengthens deliverable)
 
@@ -458,6 +465,7 @@ git log --oneline
 git diff 6f33c32..f105d47   # v1 → morning review fixes
 git diff f105d47..5589b53   # morning review → hardening
 git diff 5589b53..cfed349   # hardening → final polish
+git diff cfed349..HEAD      # audit rounds (external review fixes)
 ```
 
 ---
@@ -507,3 +515,28 @@ halting deploys. README now explains the trade-off. In production, consider gati
 10) ~~**LOW** — Tags enabled in workflow.rules but build job never runs on tags.~~
 **CORRIGIDO:** Build job now has `if: $CI_COMMIT_TAG` rule. Tags produce images with tag name
 (e.g., v1.0.0) as additional image tag.
+
+### Auditoria round 3 (Gemini, May 22, 2026)
+
+11) ~~**HIGH** — .gitlab-ci.yml cache block malformed: key/paths/policy not nested under cache:.~~
+**CORRIGIDO:** Rewrote .gitlab-ci.yml with proper 2-space YAML indentation. cache: → key: → files:
+nesting validated with PyYAML. All list items (before_script, script, rules) properly indented.
+
+12) ~~**LOW** — Dev tools unpinned (ruff, bandit) in requirements-dev.txt.~~
+**CORRIGIDO:** Pinned ruff==0.11.10 and bandit==1.9.1.
+
+13) ~~**LOW** — README cache description mentions only requirements.txt, not both files.~~
+**CORRIGIDO:** Updated to mention requirements.txt + requirements-dev.txt.
+
+14) ~~**LOW** — Tags push latest, which can overwrite mainline latest from another branch.~~
+**CORRIGIDO:** `latest` tag only pushed on main branch. Tags only push the tag-named image.
+
+15) ~~**LOW** — .pytest_cache and bandit-report.json not in .gitignore.~~
+**CORRIGIDO:** Added both to .gitignore.
+
+16) ~~**LOW** — DOSSIE.md not in .dockerignore, adds file payload to build context.~~
+**CORRIGIDO:** Added DOSSIE.md to .dockerignore.
+
+17) ~~**LOW** — DOSSIE .dockerignore description stale, commit history incomplete, cache bonus wrong.~~
+**CORRIGIDO:** Updated DOSSIE file tree descriptions, commit history to 13+ commits, git diff
+quick reference, and cache bonus to mention both requirements files.

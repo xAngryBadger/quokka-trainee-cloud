@@ -112,7 +112,7 @@ O pipeline `.gitlab-ci.yml` possui 4 stages sequenciais + 1 job bonus de seguran
 
 ### Cache do Pipeline
 
-Cache compartilhado entre jobs, key baseada no hash do `requirements.txt` + prefixo por job name. Isso garante que:
+Cache compartilhado entre jobs, key baseada no hash dos dois requirements files (`requirements.txt` + `requirements-dev.txt`) + prefixo por job name. Isso garante que:
 - Cache é invalidado automaticamente quando as dependências mudam
 - Cada job tem seu próprio namespace de cache (ruff e pytest não se contaminam)
 - O cache de ruff não é invalidado por mudanças no pytest, e vice-versa

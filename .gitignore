@@ -10,3 +10,5 @@ build/
 .idea/
 .vscode/
 .ruff_cache/
+.pytest_cache/
+bandit-report.json
