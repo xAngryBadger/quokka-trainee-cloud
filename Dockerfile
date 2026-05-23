@@ -49,7 +49,7 @@ EXPOSE 5000
 # Use Gunicorn production WSGI server with 2 workers, 4 threads each
 # More robust than Flask dev server for concurrent requests
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD python -c "import urllib.request; r=urllib.request.urlopen('http://localhost:5000/health'); assert r.status==200" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')" || exit 1
 
 # Run Gunicorn WSGI server (production-ready)
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "app:app"]

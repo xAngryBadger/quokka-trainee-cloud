@@ -2,7 +2,6 @@
 
 [![Build](https://gitlab.com/badger/quokka/badges/main/pipeline.svg)](https://gitlab.com/badger/quokka/-/pipelines)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-85%25-yellow)]()
 [![Version](https://img.shields.io/badge/version-1.0.0-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
@@ -260,6 +259,15 @@ CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "
 
 Este projeto é um **desafio de trainee** com limitações intencionais para focar em CI/CD e IaC. Abaixo, o que **NÃO** foi implementado e o porquê:
 
+#### Rate Limiting com Armazenamento em Memória
+
+**Limitação:** O rate limiter usa `storage_uri="memory://"` que armazena contadores na memória local. Em produção com múltiplas réplicas ECS, isso significa:
+- Cada container tem seus próprios contadores de rate limit
+- Um cliente pode fazer 100 requests/hour **por container**, não no total
+- Para rate limiting global, use Redis: `storage_uri="redis://..."`
+
+**Por que assim:** Redis adiciona custo (~$13/mês ElastiCache) e complexidade. Para este desafio de trainee, a limitação é aceitável e documentada.
+
 #### Requer AWS com Cartão de Crédito (fora do escopo trainee):
 
 1. **VPC Default** — Usa a VPC default da AWS com subnets públicas. Produção exigiria VPC dedicada com subnets privadas + NAT Gateway (~$32/mês + transfer). Esta escolha é documentada como fora do escopo.
@@ -278,7 +286,7 @@ Este projeto é um **desafio de trainee** com limitações intencionais para foc
 
 #### Não Requer Cartão de Crédito (mas fora do escopo do desafio):
 
-8. **Sem rate limiting** — Sem proteção contra DoS/brute force. Poderia usar `flask-limiter` sem custo adicional.
+8. **Rate limiting com limitações** — Implementado com `flask-limiter`, mas usa armazenamento em memória (ver seção "Rate Limiting com Armazenamento em Memória").
 
 9. **Sem image scanning** — Sem Trivy/Grype no pipeline. Poderia ser adicionado gratuitamente.
 
@@ -360,7 +368,14 @@ O script de healthcheck externo usa apenas `wget` e `grep`, sem dependência de 
 
 - Terraform >= 1.5.0 instalado
 - Credenciais AWS configuradas (`aws configure` ou variáveis de ambiente)
-- Bucket S3 `terraform-state-trainee` criado para o backend (ou ajuste o `backend` em `main.tf` para local)
+- **Bucket S3 `terraform-state-trainee` criado manualmente antes de rodar `terraform init`** (ou ajuste o `backend` em `main.tf` para backend local)
+
+### Criar S3 Backend (antes de `terraform init`)
+
+```bash
+aws s3 mb s3://terraform-state-trainee --region us-east-1
+aws dynamodb create-table --table-name terraform-locks --attribute-definitions AttributeName=LockID,AttributeType=S --key-schema AttributeName=LockID,KeyType=PROJECTION --billing-mode PAY_PER_REQUEST --region us-east-1
+```
 
 ### Comandos
 

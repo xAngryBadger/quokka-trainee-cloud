@@ -14,6 +14,18 @@ from flask import Flask, Response, jsonify, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
+
+def get_client_key():
+    """
+    Get client IP address for rate limiting.
+    Uses X-Forwarded-For header when behind ALB/reverse proxy.
+    Falls back to remote_address if header not present.
+    """
+    if request.headers.get("X-Forwarded-For"):
+        return request.headers.get("X-Forwarded-For").split(",")[0].strip()
+    return get_remote_address()
+
+
 # Configure structured logging
 logging.basicConfig(
     level=logging.INFO,
@@ -26,8 +38,11 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Configure rate limiting
+# Note: Memory storage means rate limits are NOT shared across container replicas.
+# For production with multiple ECS tasks, use Redis: storage_uri="redis://..."
+# See README for limitations and recommendations.
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=get_client_key,
     app=app,
     default_limits=["100 per hour"],
     storage_uri="memory://",
