@@ -2,6 +2,7 @@ from app import app
 
 
 def test_health():
+    """Testa endpoint de health check."""
     client = app.test_client()
     response = client.get("/health")
     assert response.status_code == 200
@@ -9,13 +10,14 @@ def test_health():
 
 
 def test_index():
+    """Testa endpoint raiz."""
     client = app.test_client()
     response = client.get("/")
     assert response.status_code == 200
 
 
 def test_404_error():
-    """Test 404 error handler for non-existent routes."""
+    """Testa handler de erro 404 para rotas nao existentes."""
     client = app.test_client()
     response = client.get("/nonexistent")
     assert response.status_code == 404
@@ -23,7 +25,7 @@ def test_404_error():
 
 
 def test_500_error_handler():
-    """Test 500 error handler returns correct response."""
+    """Testa handler de erro 500 retorna resposta correta."""
     from app import handle_error
     with app.test_request_context("/test"):
         response = handle_error(Exception("test error"))

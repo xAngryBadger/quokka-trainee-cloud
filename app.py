@@ -1,8 +1,8 @@
 """
-Trainee DevOps API — Flask application with production logging and error handling.
+API Trainee DevOps — Aplicação Flask com logging e tratamento de erros para produção.
 
-This is a simple health check API for the Trainee Cloud & IA challenge.
-Uses Gunicorn WSGI server (see Dockerfile CMD) for production deployment.
+Esta é uma API simples de health check para o desafio Trainee Cloud & IA.
+Usa Gunicorn WSGI server (veja CMD do Dockerfile) para deploy em produção.
 """
 
 import logging
@@ -17,16 +17,16 @@ from flask_limiter.util import get_remote_address
 
 def get_client_key():
     """
-    Get client IP address for rate limiting.
-    Uses X-Forwarded-For header when behind ALB/reverse proxy.
-    Falls back to remote_address if header not present.
+    Obtém endereço IP do cliente para rate limiting.
+    Usa header X-Forwarded-For quando atrás de ALB/reverse proxy.
+    Fallback para remote_address se header não presente.
     """
     if request.headers.get("X-Forwarded-For"):
         return request.headers.get("X-Forwarded-For").split(",")[0].strip()
     return get_remote_address()
 
 
-# Configure structured logging
+# Configura logging estruturado
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s [%(name)s] %(message)s',
@@ -37,10 +37,10 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Configure rate limiting
-# Note: Memory storage means rate limits are NOT shared across container replicas.
-# For production with multiple ECS tasks, use Redis: storage_uri="redis://..."
-# See README for limitations and recommendations.
+# Configura rate limiting
+# Nota: Armazenamento em memória significa que rate limits NÃO são compartilhados entre réplicas do container.
+# Para produção com múltiplas tasks ECS, use Redis: storage_uri="redis://..."
+# Veja README para limitações e recomendações.
 limiter = Limiter(
     key_func=get_client_key,
     app=app,
@@ -48,7 +48,7 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
-# Ensure all logs go to stdout for Docker capture
+# Garante que todos os logs vão para stdout para captura do Docker
 app.logger.handlers = []
 app.logger.addHandler(logging.StreamHandler(sys.stdout))
 app.logger.setLevel(logging.INFO)
@@ -56,27 +56,27 @@ app.logger.setLevel(logging.INFO)
 
 @app.before_request
 def log_request() -> None:
-    """Log incoming requests for observability."""
+    """Registra requisições de entrada para observabilidade."""
     logger.info(f"GET {request.path} from {request.remote_addr}")
 
 
 @app.after_request
 def log_response(response: Response) -> Response:
-    """Log response status codes."""
+    """Registra status codes das respostas."""
     logger.info(f"Response {response.status_code} for {request.path}")
     return response
 
 
 @app.errorhandler(Exception)
 def handle_error(e: Exception) -> tuple[Response, int]:
-    """Global error handler - prevents unhandled exceptions from leaking info."""
+    """Handler global de erros - previne que exceções não tratadas vaze informações."""
     logger.error(f"Unhandled exception in {request.path}: {str(e)}", exc_info=True)
     return jsonify({"error": "internal_server_error"}), 500
 
 
 @app.errorhandler(404)
 def handle_404(e: Exception) -> tuple[Response, int]:
-    """Handle 404 errors gracefully."""
+    """Trata erros 404 graciosamente."""
     logger.info("404 Not Found: %s", request.path)
     return jsonify({"error": "not_found"}), 404
 
@@ -85,10 +85,10 @@ def handle_404(e: Exception) -> tuple[Response, int]:
 @limiter.limit("10 per minute")
 def health() -> tuple[Response, int] | Response:
     """
-    Health check endpoint.
+    Endpoint de health check.
 
-    Returns:
-        JSON with status, timestamp (ISO8601 UTC), and version.
+    Retorna:
+        JSON com status, timestamp (ISO8601 UTC) e versão.
     """
     try:
         health_data: dict[str, Any] = {
@@ -107,10 +107,10 @@ def health() -> tuple[Response, int] | Response:
 @limiter.limit("10 per minute")
 def index() -> Response | tuple[Response, int]:
     """
-    Root endpoint.
+    Endpoint raiz.
 
-    Returns:
-        JSON welcome message.
+    Retorna:
+        JSON com mensagem de boas-vindas.
     """
     try:
         return jsonify({"message": "Trainee DevOps API"})
@@ -120,8 +120,8 @@ def index() -> Response | tuple[Response, int]:
 
 
 if __name__ == "__main__":
-    # NOTE: This is only for local development testing.
-    # Production uses Gunicorn (see Dockerfile CMD).
-    # The Flask dev server is single-threaded and not production-ready.
+    # NOTA: Isso é apenas para teste de desenvolvimento local.
+    # Produção usa Gunicorn (veja CMD do Dockerfile).
+    # O servidor dev do Flask é single-threaded e não é production-ready.
     logger.warning("Running Flask dev server (NOT for production use)")
-    app.run(host="0.0.0.0", port=5000, debug=False)  # noqa: S104
+    app.run(host="0.0.0.0", port=5000, debug=False) # noqa: S104

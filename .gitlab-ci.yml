@@ -1,8 +1,8 @@
 # =============================================================================
 # Pipeline CI/CD — Trainee Cloud & IA
 # =============================================================================
-# 4 stages (lint → test → build → deploy) + bonus SAST in test stage
-# Docker-in-Docker for image build; deploy only on main with manual gate
+# 4 stages (lint → test → build → deploy) + SAST bônus no stage test
+# Docker-in-Docker para build da imagem; deploy apenas na main com aprovação manual
 # =============================================================================
 
 stages:
@@ -12,24 +12,24 @@ stages:
   - build
   - deploy
 
-# Prevent duplicate pipelines — only MR pipelines and main branch pipelines run
+# Previne pipelines duplicados — apenas pipelines de MR e branch main rodam
 workflow:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_TAG
+rules:
+- if: $CI_PIPELINE_SOURCE == "merge_request_event"
+- if: $CI_COMMIT_BRANCH == "main"
+- if: $CI_COMMIT_TAG
 
 # -----------------------------------------------------------------------------
-# Global variables
+# Variáveis globais
 # -----------------------------------------------------------------------------
 variables:
-  DOCKER_TLS_CERTDIR: "/certs"
-  DOCKER_IMAGE_NAME: "$CI_REGISTRY_IMAGE"
-  DOCKER_IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+DOCKER_TLS_CERTDIR: "/certs"
+DOCKER_IMAGE_NAME: "$CI_REGISTRY_IMAGE"
+DOCKER_IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
 
 # -----------------------------------------------------------------------------
-# Cache — keyed on both requirements files so it invalidates only when deps change
-# Dev deps (ruff, bandit, pytest) live in requirements-dev.txt.
+# Cache — keyado em ambos arquivos de requirements para invalidar apenas quando deps mudam
+# Dev deps (ruff, bandit, pytest) estão em requirements-dev.txt.
 # -----------------------------------------------------------------------------
 .cache_template: &cache_config
   cache:
@@ -67,12 +67,12 @@ test:
     - pytest test_app.py -v --tb=short
 
 # =============================================================================
-# STAGE: SAST (bonus) — bandit security scan
+# STAGE: SAST (bônus) — bandit security scan
 # =============================================================================
-# Bandit runs a full scan (JSON report) and a high-severity text output.
-# allow_failure=true by design: SAST surfaces findings without blocking deploys.
-# For a new project, blocking on SAST risks false positives halting the pipeline.
-# In production, consider gating on HIGH severity after tuning exclusions.
+# Bandit roda scan completo (relatório JSON) e output de severidade alta.
+# allow_failure=true por design: SAST expõe findings sem bloquear deploys.
+# Para projeto novo, bloquear no SAST arrisca falsos positivos travando pipeline.
+# Em produção, considerar gating em severidade HIGH após ajustar exclusões.
 sast:
   stage: test
   image: python:3.12-alpine
@@ -91,8 +91,8 @@ sast:
 # =============================================================================
 # STAGE: VALIDATE INFRA — Terraform fmt/validate/plan
 # =============================================================================
-# Ensures Terraform code is properly formatted and syntactically valid
-# before any apply. Plan output posted as MR comment for review.
+# Garante que código Terraform está formatado e sintaticamente válido
+# antes de qualquer apply. Saída do plan postada como comentário no MR para revisão.
 terraform-validate:
   stage: validate-infra
   image: hashicorp/terraform:1.8
@@ -101,9 +101,9 @@ terraform-validate:
   before_script:
     - terraform init -backend=false
   script:
-    - terraform fmt -check -recursive
-    - terraform validate
-    - echo "Terraform validation passed"
+- terraform fmt -check -recursive
+- terraform validate
+- echo "Validação Terraform passou"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -128,9 +128,9 @@ terraform-plan:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # =============================================================================
-# STAGE: BUILD — Docker image → GitLab Container Registry
+# STAGE: BUILD — Imagem Docker → GitLab Container Registry
 # =============================================================================
-# Uses DOCKER_BUILDKIT for --mount=type=cache in Dockerfile
+# Usa DOCKER_BUILDKIT para --mount=type=cache no Dockerfile
 build:
   stage: build
   image: docker:24-dind
@@ -161,11 +161,11 @@ build:
       when: manual
 
 # =============================================================================
-# STAGE: DEPLOY — simulated ECS deploy (main only, manual gate)
+# STAGE: DEPLOY — deploy ECS simulado (apenas main, aprovação manual)
 # =============================================================================
-# In a real pipeline, aws-cli would be installed and these commands would
-# actually execute. For this simulation we echo them to demonstrate the
-# deployment flow without installing unnecessary packages.
+# Em pipeline real, aws-cli estaria instalado e estes comandos
+# seriam executados. Para esta simulação, imprimimos para demonstrar o
+# fluxo de deploy sem instalar pacotes desnecessários.
 deploy:
   stage: deploy
   image: alpine:3.19
@@ -184,7 +184,7 @@ deploy:
     - echo " 2. aws ecs wait services-stable --cluster trainee-cluster --services trainee-api-service"
     - echo " 3. aws elbv2 describe-target-health --target-group-arn \$TARGET_GROUP_ARN"
     - echo ""
-    - echo "Deploy simulado com sucesso!"
+    - echo "Deploy simulado concluído com sucesso!"
   environment:
     name: production
   rules:

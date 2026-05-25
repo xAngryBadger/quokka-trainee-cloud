@@ -4,19 +4,19 @@ target-version = "py312"
 
 [lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes — unused imports, variables
-    "I",   # isort — import ordering
-    "UP",  # pyupgrade — modernize syntax for Python 3.12+
-    "B",   # flake8-bugbear — common gotchas and anti-patterns
-    "SIM", # flake8-simplify — simplify gratuitous complexity
-    "C4",  # flake8-comprehensions — unnecessary list/dict calls
-    "S",   # flake8-bandit — security anti-patterns
+"E", # pycodestyle — erros de estilo
+"W", # pycodestyle — avisos
+"F", # pyflakes — imports e variáveis não utilizadas
+"I", # isort — ordenação de imports
+"UP", # pyupgrade — moderniza sintaxe para Python 3.12+
+"B", # flake8-bugbear — anti-padroes e erros comuns
+"SIM", # flake8-simplify — simplifica complexidade desnecessária
+"C4", # flake8-comprehensions — chamadas list/dict desnecessárias
+"S", # flake8-bandit — anti-padroes de segurança
 ]
 
 ignore = [
-    "S101", # assert is fine in test files (ruff auto-excludes test_*)
+"S101", # assert é aceitável em arquivos de teste (ruff auto-exclui test_*)
 ]
 
 [lint.isort]

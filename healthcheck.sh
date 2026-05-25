@@ -1,32 +1,32 @@
 #!/bin/sh
-# Healthcheck — validates API /health endpoint from outside the container
-# Usage: ./healthcheck.sh [HOST] [PORT]
-# No python dependency — uses wget only (compatible with busybox wget)
+# Healthcheck — valida endpoint /health da API de fora do container
+# Uso: ./healthcheck.sh [HOST] [PORT]
+# Sem dependencia de Python — usa wget apenas (compativel com busybox wget)
 
 HOST="${1:-localhost}"
 PORT="${2:-5000}"
 URL="http://${HOST}:${PORT}/health"
 
-# Single wget request: capture both status code and body
-# busybox wget supports -q -O- and -S (server response headers)
+# Requisicao wget unica: captura codigo de status e corpo
+# busybox wget suporta -q -O- e -S (headers da resposta do servidor)
 response=$(wget -qO- --timeout=5 -S "$URL" 2>&1)
 
-# Extract HTTP status code from headers (last occurrence for redirects)
+# Extrai codigo HTTP dos headers (ultima ocorrencia para redirecionamentos)
 http_code=$(echo "$response" | awk '/HTTP\//{print $2}' | tail -1)
 
 if [ "$http_code" != "200" ]; then
-    echo "CRITICAL - HTTP ${http_code:-none} from ${URL}"
-    exit 1
+echo "CRITICO - HTTP ${http_code:-none} de ${URL}"
+exit 1
 fi
 
-# Extract body (everything after the last blank line separating headers from body)
+# Extrai corpo (tudo apos a ultima linha em branco separando headers do corpo)
 body=$(echo "$response" | sed -n '/^$/,$ p' | tail -n +2)
 
-# Check that the response body contains "status":"healthy"
+# Verifica se o corpo da resposta contém "status":"healthy"
 if echo "$body" | grep -q '"status"[[:space:]]*:[[:space:]]*"healthy"'; then
-    echo "OK - API is healthy at ${URL}"
-    exit 0
+echo "OK - API saudavel em ${URL}"
+exit 0
 else
-    echo "CRITICAL - API responded 200 but body missing healthy status at ${URL}"
-    exit 1
+echo "CRITICO - API respondeu 200 mas corpo sem status healthy em ${URL}"
+exit 1
 fi
