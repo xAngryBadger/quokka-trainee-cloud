@@ -1,107 +1,165 @@
-# DOSSIE — Quokka Project Full Report
+# DOSSIE — Relatório Completo do Projeto Quokka
 
-> This document is a structured, machine-readable dossier of the entire quokka project.
-> Purpose: enable an AI or human reviewer to verify every deliverable against the challenge PDF,
-> understand every decision, and trace every file to its requirement.
-
----
-
-## 1. WHAT — Project Identity
-
-**Name:** quokka
-**Candidate:** Isaac Nathan da Silva Barbosa (git: NathanBadger / isaacnathandasilva@gmail.com)
-**Challenge:** Trainee Cloud & IA — Desafio Tecnico 2
-**Deadline:** 48 hours from May 21, 2026 ~17:48 BRT
-**Result:** A Flask health-check API, containerized with Docker, tested with pytest, linted with ruff,
-secured with bandit SAST, deployed via a 4-stage GitLab CI/CD pipeline, and provisioned on AWS ECS Fargate via Terraform.
+> Este documento é um dossiê estruturado e legível por máquina de todo o projeto quokka.
+> Propósito: permitir que um revisor (IA ou humano) verifique cada entregável contra o PDF do desafio,
+> entenda cada decisão e rastreie cada arquivo até seu requisito.
 
 ---
 
-## 2. WHY — Problem Statement (STAR: Situation)
+## 1. O QUÊ — Identidade do Projeto
 
-A trainee candidate must demonstrate practical Cloud & IA skills by building a production-grade
-deployment pipeline for a simple Flask API. The challenge demands:
-
-1. A working Flask API with a `/health` endpoint returning JSON
-2. Unit tests for the API
-3. A Dockerfile that follows security best practices
-4. A GitLab CI/CD pipeline with lint, test, build, and deploy stages
-5. Terraform IaC for AWS ECS Fargate deployment
-6. Full documentation in a README
-7. Honest documentation of AI tool usage
-
-The challenge explicitly evaluates: **container security**, **pipeline correctness**,
-**IaC completeness**, and **transparency about AI assistance**.
+**Nome:** quokka
+**Candidato:** Isaac Nathan da Silva Barbosa (git: NathanBadger / isaacnathandasilva@gmail.com)
+**Desafio:** Trainee Cloud & IA — Desafio Técnico 2
+**Prazo:** 48 horas a partir de 21 de Maio, 2026 ~17:48 BRT
+**Resultado:** Uma API Flask de health check, containerizada com Docker, testada com pytest, lintada com ruff,
+segurada com bandit SAST, deployada via pipeline GitLab CI/CD de 4 stages, e provisionada no AWS ECS Fargate via Terraform.
 
 ---
 
-## 3. HOW — Solution Architecture (STAR: Task + Action)
+## 2. POR QUÊ — Declaração do Problema (STAR: Situação)
 
-### 3.1 Architecture Diagram
+Um candidato trainee deve demonstrar habilidades práticas de Cloud & IA construindo um pipeline
+de deployment production-grade para uma API Flask simples. O desafio exige:
+
+1. Uma API Flask funcional com endpoint `/health` retornando JSON
+2. Testes unitários para a API
+3. Um Dockerfile que segue boas práticas de segurança
+4. Um pipeline GitLab CI/CD com stages de lint, test, build e deploy
+5. IaC com Terraform para deploy no AWS ECS Fargate
+6. Documentação completa no README
+7. Documentação honesta do uso de ferramentas de IA
+
+O desafio avalia explicitamente: **segurança de containers**, **correção do pipeline**,
+**completude da IaC** e **transparência sobre assistência de IA**.
+
+---
+
+## 3. COMO — Arquitetura da Solução (STAR: Tarefa + Ação)
+
+### 3.1 Diagrama de Arquitetura
 
 ```
 Internet
-    │
-    ▼
+│
+▼
 ┌─────────────────────────┐
-│  ALB (SG: alb_sg)       │  Accepts HTTP/80 from 0.0.0.0/0
-│  Port 80 → forward to   │  Egress: only to ECS SG on port 5000
-│  Target Group            │
+│ ALB (SG: alb_sg) │ Aceita HTTP/80 de 0.0.0.0/0
+│ Porta 80 → forward para │ Egress: apenas para ECS SG na porta 5000
+│ Target Group │
 └──────────┬──────────────┘
-           │
-           ▼
+│
+▼
 ┌─────────────────────────┐
-│  ECS Fargate (SG: ecs_sg)│  Accepts traffic only from ALB SG
-│  ┌───────────────────┐  │  Egress: 0.0.0.0/0 (pull images, logs)
-│  │  Flask API :5000  │  │  readonlyRootFilesystem=true
-│  │  user: appuser    │  │  healthCheck: HTTP 200 on /health
-│  └───────────────────┘  │
-│  2 tasks (desired_count)│
+│ ECS Fargate (SG: ecs_sg)│ Aceita tráfego apenas do ALB SG
+│ ┌───────────────────┐ │ Egress: 0.0.0.0/0 (pull de imagens, logs)
+│ │ Flask API :5000 │ │ readonlyRootFilesystem=true
+│ │ user: appuser │ │ healthCheck: HTTP 200 no /health
+│ └───────────────────┘ │
+│ 2 tasks (desired_count)│
 └──────────┬──────────────┘
-           │
-           ▼
+│
+▼
 ┌─────────────────────────┐
-│  CloudWatch Logs         │  /ecs/trainee-devops-api (7-day retention)
-│  Container Insights      │  Enabled on cluster
+│ CloudWatch Logs │ /ecs/trainee-devops-api (retenção 7 dias)
+│ Container Insights │ Habilitado no cluster
 └─────────────────────────┘
 ```
 
-### 3.2 CI/CD Pipeline Diagram
+### 3.2 Diagrama do Pipeline CI/CD
 
 ```
 Push / MR Event
-    │
-    ▼
-┌──────────┐     ┌──────────┐     ┌──────────┐
-│  LINT    │────▶│  TEST    │────▶│  BUILD   │────▶ DEPLOY
-│  ruff    │     │  pytest  │     │  docker  │      (manual,
-│          │     │  bandit  │     │  push    │       main only)
-└──────────┘     │  (SAST)  │     └──────────┘
-                 └──────────┘
+│
+▼
+┌──────────┐ ┌──────────┐ ┌──────────┐
+│ LINT │────▶│ TEST │────▶│ BUILD │────▶ DEPLOY
+│ ruff │ │ pytest │ │ docker │ (manual,
+│ │ │ bandit │ │ push │ main only)
+└──────────┘ │ (SAST) │ └──────────┘
+└──────────┘
 ```
 
 
 
-## 4. IMPACT — STAR Results
+## 4. IMPACTO — Resultados STAR
 
-| Area | Before (v1/AI output) | After (review + hardening) | Impact |
-|------|----------------------|---------------------------|--------|
-| Security | Single SG, container port open to 0.0.0.0/0 | Separate ALB/ECS SGs, egress least-privilege | Eliminated ALB bypass vector |
-| Security | `readonlyRootFilesystem=false` | `readonlyRootFilesystem=true` | Immutable container — no RCE file writes |
-| Security | Healthcheck only checks connectivity | Validates `assert r.status==200` (defense-in-depth, since urlopen raises on 5xx too) | Explicit intent + handles suppressed exceptions |
-| IAM | `arn:aws:iam:::aws:policy/...` (3 colons) | `arn:aws:iam::aws:policy/...` (2 colons) | Terraform plan would fail |
-| Pipeline | `|| true` on SAST, `allow_failure` on build | `--severity-level high`, build fails on failure | No more false greens |
-| Pipeline | No workflow.rules (duplicate pipelines) | `workflow.rules` for MR/main/tags only | Saves runner minutes |
-| Lint | `ruff check` with zero config | `ruff.toml` with 8 explicit rule categories | Documented, reproducible lint standards |
-| Python | `datetime.utcnow()` (deprecated) | `datetime.now(UTC)` (PEP 685) | Timezone-aware timestamps |
-| State | No locking | S3 backend + DynamoDB lock table | Prevents concurrent state corruption |
-| Network | No `assign_public_ip` on ECS service | `assign_public_ip = true` on network_configuration | Tasks can pull images from registry in public subnets |
-| Build | No BuildKit cache | `--mount=type=cache` for pip downloads | Faster rebuilds on dependency changes |
+| Área | Antes (v1/output da IA) | Depois (revisão + hardening) | Impacto |
+|------|------------------------|------------------------------|---------|
+| Segurança | SG única, porta do container aberta para 0.0.0.0/0 | SGs separadas ALB/ECS, egress least-privilege | Eliminado vetor de bypass do ALB |
+| Segurança | `readonlyRootFilesystem=false` | `readonlyRootFilesystem=true` | Container imutável — sem escrita de arquivos via RCE |
+| Segurança | Healthcheck verifica apenas conectividade | Valida `assert r.status==200` (defense-in-depth, pois urlopen também levanta em 5xx) | Intenção explícita + lida com exceções suprimidas |
+| IAM | `arn:aws:iam:::aws:policy/...` (3 dois-pontos) | `arn:aws:iam::aws:policy/...` (2 dois-pontos) | Terraform plan falharia |
+| Pipeline | `|| true` no SAST, `allow_failure` no build | `--severity-level high`, build falha se falhar | Sem mais falsos-verdes |
+| Pipeline | Sem workflow.rules (pipelines duplicados) | `workflow.rules` para MR/main/tags apenas | Economiza runner minutes |
+| Lint | `ruff check` sem configuração | `ruff.toml` com 8 categorias de regras explícitas | Padrões de lint documentados e reprodutíveis |
+| Python | `datetime.utcnow()` (deprecated) | `datetime.now(UTC)` (PEP 685) | Timestamps com timezone |
+| State | Sem locking | Backend S3 + tabela de lock DynamoDB | Previne corrupção concorrente do state |
+| Rede | Sem `assign_public_ip` no ECS service | `assign_public_ip = true` no network_configuration | Tasks podem fazer pull de imagens do registry em subnets públicas |
+| Build | Sem cache BuildKit | `--mount=type=cache` para downloads pip | Rebuilds mais rápidos em mudanças de dependência |
 
 ---
 
-## 5. FILE TREE — Complete Map with Mini-RAG Descriptions
+## 5. ÁRVORE DE ARQUIVOS — Mapa Completo com Descrições
 
+```
+quokka/
+├── app.py # API Flask: dois endpoints (/health retorna JSON status+timestamp+version,
+│ # / retorna mensagem de boas-vindas). Usa datetime.UTC (3.12+), roda em 0.0.0.0:5000
+│ # com S104 noqa. Usuário não-root reforçado no Dockerfile e ECS task definition.
+│
+├── test_app.py # Testes unitários pytest: test_health verifica /health retorna 200 + status=healthy,
+│ # test_index verifica / retorna 200. Usa Flask test_client — sem necessidade de servidor HTTP.
+│
+├── requirements.txt # Dependência de runtime apenas: flask==3.0.0. Instalada pelo Dockerfile — sem
+│ # pytest/ruff/bandit na imagem de produção. Minimiza superfície de ataque.
+│
+├── requirements-dev.txt # Dependências de desenvolvimento: pytest, ruff, bandit. Usadas por jobs CI e testes
+│ # locais. Excluídas do build Docker via .dockerignore.
+│
+├── ruff.toml # Configuração do linter: seleciona categorias E/W/F/I/UP/B/SIM/C4/S,
+│ # target Python 3.12, ignora S101 (assert em testes), configura isort known-first-party.
+│ # Documenta o que consideramos erro e por quê — sem defaults cegos.
+│
+├── Dockerfile # Build multi-stage: estágio builder instala deps com pip install --prefix,
+│ # estágio runtime copia apenas o output da instalação. Non-root appuser, HEALTHCHECK com
+│ # validação HTTP 200, EXPOSE 5000. Base Alpine para superfície de ataque mínima.
+│
+├── docker-compose.yml # Desenvolvimento local: build a partir do Dockerfile, mapeia porta 5000, healthcheck
+│ # igual ao Dockerfile (HTTP 200 + assert), restart unless-stopped. Sem volume mounts necessários.
+│
+├── healthcheck.sh # Health check shell-only: wget + grep, sem dependência de Python. Valida HTTP
+│ # status code 200 e corpo contém "status":"healthy". Compatível com busybox (Alpine).
+│ # Aceita argumentos opcionais HOST e PORT para monitoramento externo.
+│
+├── .gitlab-ci.yml # Pipeline de 4 stages (lint→test→build→deploy) + SAST bônus. workflow.rules previne
+│ # pipelines duplicados. Cache keyado em requirements.txt + requirements-dev.txt
+│ # hash + prefixo do job name. Build em main/tags automático, em MR manual. Tags geram
+│ # imagens de release. Deploy main-only, aprovação manual com needs:[build].
+│
+├── .dockerignore # Exclui test_app.py, terraform/, .gitlab-ci.yml, healthcheck.sh, ruff.toml,
+│ # requirements-dev.txt, DOSSIE.md, README, .gitignore, .ruff_cache, venvs,
+│ # __pycache__, bandit report do contexto de build Docker.
+│
+├── .gitignore # Exclui __pycache__, .pyc/.pyo, .env, .venv, venv, egg-info, dist, build,
+│ # .idea, .vscode, .ruff_cache, .pytest_cache, bandit-report.json.
+│
+└── terraform/
+├── main.tf # Config do provider: AWS ~>5.0, região por variável, default tags (Project,
+│ # Environment, ManagedBy). Backend S3 com tabela de lock DynamoDB.
+│ # Requer Terraform >= 1.5.0.
+│
+├── variables.tf # 7 variáveis: aws_region, environment, app_name, container_image, container_port,
+│ # cpu, memory, desired_count. Todas tipadas, descritas, com defaults seguros para produção.
+│
+├── ecs.tf # Infraestrutura principal: data sources de VPC, SGs separadas alb_sg + ecs_sg (ingress apenas
+│ # do ALB), ALB + target group + listener, cluster ECS com Container Insights,
+│ # log group CloudWatch (retenção 7 dias), IAM task execution role com ARN correto,
+│ # task definition (Fargate, awsvpc, readonlyRootFilesystem=true, appuser, healthCheck),
+│ # ECS service com integração LB, depends_on, e lifecycle ignore_changes.
+│
+└── outputs.tf # 3 outputs: alb_dns_name (URL do endpoint), ecs_cluster_name, ecs_service_name.
+│ # Mínimo mas suficiente para verificação e referência downstream.
 ```
 quokka/
 ├── app.py                    # Flask API: two endpoints (/health returns JSON status+timestamp+version,
@@ -164,255 +222,254 @@ quokka/
 
 ---
 
-## 6. REQUIREMENT TRACEABILITY MATRIX
+## 6. MATRIZ DE RASTREABILIDADE DE REQUISITOS
 
-Map every challenge requirement to the file and line that satisfies it.
+Mapeia cada requisito do desafio para o arquivo e linha que o satisfaz.
 
-### Mandatory Requirements
+### Requisitos Obrigatórios
 
-| # | Requirement | File | Evidence |
-|---|-------------|------|----------|
-| 1 | Flask API with `/health` endpoint | `app.py:8-16` | `@app.route("/health")` returns JSON with status, timestamp, version |
-| 2 | API returns JSON | `app.py:9-15` | `jsonify({"status": "healthy", ...})` |
-| 3 | Unit tests | `test_app.py:4-14` | `test_health` + `test_index` with Flask test_client |
+| # | Requisito | Arquivo | Evidência |
+|---|-----------|---------|-----------|
+| 1 | API Flask com endpoint `/health` | `app.py:8-16` | `@app.route("/health")` retorna JSON com status, timestamp, version |
+| 2 | API retorna JSON | `app.py:9-15` | `jsonify({"status": "healthy", ...})` |
+| 3 | Testes unitários | `test_app.py:4-14` | `test_health` + `test_index` com Flask test_client |
 | 4 | Dockerfile | `Dockerfile:1-45` | Multi-stage, non-root, healthcheck, Alpine |
-| 5 | Docker best practices | `Dockerfile:25,34-36,42-43` | `adduser -D`, `USER appuser`, HEALTHCHECK with 200 validation |
-| 6 | Docker Compose for local dev | `docker-compose.yml:1-15` | Build + port map + healthcheck + restart |
-| 7 | GitLab CI/CD pipeline | `.gitlab-ci.yml:8-144` | 4 stages + SAST bonus |
-| 8 | Pipeline: lint stage | `.gitlab-ci.yml:47-54` | `ruff check app.py test_app.py --config ruff.toml` |
-| 9 | Pipeline: test stage | `.gitlab-ci.yml:59-66` | `pytest test_app.py -v --tb=short` |
-| 10 | Pipeline: build stage | `.gitlab-ci.yml:94-111` | Docker build + push to GitLab Registry |
-| 11 | Pipeline: deploy stage | `.gitlab-ci.yml:119-144` | Simulated ECS deploy, main only, manual gate |
-| 12 | Terraform IaC | `terraform/*.tf` | 4 files: main, variables, ecs, outputs |
-| 13 | ECS Fargate deployment | `terraform/ecs.tf:156-229` | Task definition + service + cluster |
+| 5 | Boas práticas Docker | `Dockerfile:25,34-36,42-43` | `adduser -D`, `USER appuser`, HEALTHCHECK com validação 200 |
+| 6 | Docker Compose para dev local | `docker-compose.yml:1-15` | Build + mapeamento de porta + healthcheck + restart |
+| 7 | Pipeline GitLab CI/CD | `.gitlab-ci.yml:8-144` | 4 stages + SAST bônus |
+| 8 | Pipeline: stage lint | `.gitlab-ci.yml:47-54` | `ruff check app.py test_app.py --config ruff.toml` |
+| 9 | Pipeline: stage test | `.gitlab-ci.yml:59-66` | `pytest test_app.py -v --tb=short` |
+| 10 | Pipeline: stage build | `.gitlab-ci.yml:94-111` | Docker build + push para GitLab Registry |
+| 11 | Pipeline: stage deploy | `.gitlab-ci.yml:119-144` | Deploy ECS simulado, main only, aprovação manual |
+| 12 | IaC Terraform | `terraform/*.tf` | 4 arquivos: main, variables, ecs, outputs |
+| 13 | Deploy ECS Fargate | `terraform/ecs.tf:156-229` | Task definition + service + cluster |
 | 14 | Load balancer | `terraform/ecs.tf:70-104` | ALB + target group + listener |
-| 15 | Security groups | `terraform/ecs.tf:17-64` | Separate ALB SG + ECS SG, least-privilege |
-| 16 | README documentation | `README.md:1-312` | Full: run, pipeline, structure, decisions, IA usage |
-| 17 | AI usage documentation | `README.md:275-311` | 6 specific items with bugs found + lessons |
+| 15 | Security groups | `terraform/ecs.tf:17-64` | SGs separadas ALB + ECS, least-privilege |
+| 16 | Documentação README | `README.md:1-312` | Completa: rodar, pipeline, estrutura, decisões, uso de IA |
+| 17 | Documentação de uso de IA | `README.md:275-311` | 6 itens específicos com bugs encontrados + lições |
 
-### Bonus Requirements (5 items)
+### Requisitos Bônus (5 itens)
 
-| # | Bonus | File | Evidence |
-|---|-------|------|----------|
-| B1 | SAST/security scan | `.gitlab-ci.yml:75-88` | Bandit scan, JSON artifact, HIGH severity output |
-| B2 | Terraform state management | `terraform/main.tf:11-16` | S3 backend + DynamoDB locking |
-| B3 | Health check script | `healthcheck.sh:1-32` | Shell-only, wget+grep, busybox-compatible |
-| B4 | Container security hardening | `Dockerfile:25,34-36` + `terraform/ecs.tf:169,178` | Non-root user + readonlyRootFilesystem |
-| B5 | Pipeline cache optimization | `.gitlab-ci.yml:34-43` | Keyed on requirements.txt + requirements-dev.txt hash + job name prefix |
+| # | Bônus | Arquivo | Evidência |
+|---|-------|---------|-----------|
+| B1 | SAST/security scan | `.gitlab-ci.yml:75-88` | Scan bandit, artefato JSON, output de severidade HIGH |
+| B2 | Gerenciamento de state Terraform | `terraform/main.tf:11-16` | Backend S3 + locking DynamoDB |
+| B3 | Script de health check | `healthcheck.sh:1-32` | Shell-only, wget+grep, compatível com busybox |
+| B4 | Hardening de segurança do container | `Dockerfile:25,34-36` + `terraform/ecs.tf:169,178` | Usuário não-root + readonlyRootFilesystem |
+| B5 | Otimização de cache no pipeline | `.gitlab-ci.yml:34-43` | Keyado em hash de requirements.txt + requirements-dev.txt + prefixo do job name |
 
-### Linter Config (not explicitly required, but strengthens deliverable)
+### Configuração do Linter (não explicitamente requisitada, mas fortalece a entregável)
 
-| Item | File | Evidence |
-|------|------|----------|
-| Explicit ruff config | `ruff.toml:1-26` | 8 rule categories, py312 target, isort config |
-| CI references config | `.gitlab-ci.yml:54` | `--config ruff.toml` |
+| Item | Arquivo | Evidência |
+|------|---------|-----------|
+| Config ruff explícita | `ruff.toml:1-26` | 8 categorias de regras, target py312, config isort |
+| CI referencia config | `.gitlab-ci.yml:54` | `--config ruff.toml` |
 
 ---
 
-## 7. DECISION LOG — Every Technical Choice Explained
+## 7. REGISTRO DE DECISÕES — Cada Escolha Técnica Explicada
 
-### 7.1 Why Alpine, not Slim?
+### 7.1 Por que Alpine, não Slim?
 
-Alpine (~50MB base) vs Slim (~120MB). Flask without native C deps doesn't need glibc.
-Less packages = smaller attack surface. Trade-off: musl libc instead of glibc (potential
-compatibility issues with some pip packages, but not relevant here).
+Alpine (~50MB base) vs Slim (~120MB). Flask sem deps C nativos não precisa de glibc.
+Menos pacotes = menor superfície de ataque. Trade-off: musl libc ao invés de glibc (possíveis
+problemas de compatibilidade com alguns pacotes pip, mas não relevante aqui).
 
-### 7.2 Why Multi-stage Build?
+### 7.2 Por que Multi-stage Build?
 
-Builder stage has pip + build tools. Runtime stage has only the installed packages + app code.
-If the builder is compromised, it doesn't exist in the final image. Reduces image size by ~40%
-and eliminates entire categories of attack tools from the runtime.
+O estágio builder tem pip + ferramentas de build. O estágio runtime tem apenas os pacotes instalados + código da app.
+Se o builder for comprometido, ele não existe na imagem final. Reduz tamanho da imagem em ~40%
+e elimina categorias inteiras de ferramentas de ataque do runtime.
 
-### 7.3 Why Non-root User?
+### 7.3 Por que Usuário Não-root?
 
-If an attacker achieves RCE, they land as `appuser` — no root privileges, no package installs,
-no mount operations. Enforced both in Dockerfile (`USER appuser`) and in ECS task definition
+Se um atacante conseguir RCE, ele cai como `appuser` — sem privilégios de root, sem installs de pacotes,
+sem operações de mount. Reforçado tanto no Dockerfile (`USER appuser`) quanto no ECS task definition
 (`"user": "appuser"`).
 
-### 7.4 Why readonlyRootFilesystem=true?
+### 7.4 Por que readonlyRootFilesystem=true?
 
-An attacker with RCE cannot write binaries, scripts, or configs to disk. Python gracefully
-skips `__pycache__` writes when the filesystem is read-only. Flask doesn't need `/tmp` for
-this application. If it did, a tmpfs mount would be added.
+Um atacante com RCE não pode escrever binários, scripts ou configs no disco. Python ignora
+graciosamente escritas de `__pycache__` quando o filesystem é read-only. Flask não precisa de `/tmp` para
+esta aplicação. Se precisasse, um mount tmpfs seria adicionado.
 
-### 7.5 Why Separate ALB + ECS Security Groups?
+### 7.5 Por que Security Groups Separadas para ALB + ECS?
 
-In `awsvpc` mode, each ECS task gets its own ENI with a public IP. Without an ECS SG that
-restricts ingress to the ALB SG only, the container port is reachable directly from the
-internet — bypassing the ALB entirely. Separate SGs enforce: internet → ALB → container.
+No modo `awsvpc`, cada task ECS recebe seu próprio ENI com IP público. Sem uma SG ECS que
+restringe ingress apenas para a SG do ALB, a porta do container é acessível diretamente da
+internet — bypassando o ALB inteiramente. SGs separadas reforçam: internet → ALB → container.
 
-### 7.6 Why ALB Egress Restricted to ECS SG?
+### 7.6 Por que Egress do ALB Restrito para ECS SG?
 
-The ALB SG's egress rule allows outbound ONLY to the ECS SG on port 5000. If the ALB is
-compromised, it can't reach arbitrary internal resources. Default egress (0.0.0.0/0) would
-let a compromised ALB port-scan the VPC.
+A regra de egress da SG do ALB permite saída APENAS para a SG do ECS na porta 5000. Se o ALB for
+comprometido, ele não pode alcançar recursos internos arbitrários. Egress default (0.0.0.0/0) permitiria
+que um ALB comprometido fizesse port-scan da VPC.
 
-### 7.7 Why ruff instead of flake8?
+### 7.7 Por que ruff ao invés de flake8?
 
-10-100x faster, compatible rule set, single binary, isort built-in. In CI, speed matters.
-The `ruff.toml` explicitly selects E/W/F/I/UP/B/SIM/C4/S — no blind defaults.
+10-100x mais rápido, set de regras compatível, binário único, isort integrado. No CI, velocidade importa.
+O `ruff.toml` seleciona explicitamente E/W/F/I/UP/B/SIM/C4/S — sem defaults cegos.
 
-### 7.8 Why `workflow.rules` in CI?
+### 7.8 Por que `workflow.rules` no CI?
 
-Without it, a push to a branch with an open MR creates TWO pipelines (branch push + MR event).
-`workflow.rules` ensures only one pipeline runs per change, saving runner minutes and preventing
-confusing duplicate job results.
+Sem ele, um push para branch com MR aberto cria DOIS pipelines (branch push + MR event).
+`workflow.rules` garante que apenas um pipeline roda por mudança, economizando runner minutes e
+prevenindo resultados duplicados confusos.
 
-### 7.9 Why Deploy is `when: manual`?
+### 7.9 Por que Deploy é `when: manual`?
 
-Production deploys should be intentional. Even on main, a human must click "deploy." Prevents
-accidental deployments from merge commits. The `needs: [build]` ensures the deploy job only
-appears after a successful build.
+Deploys em produção devem ser intencionais. Mesmo na main, um humano precisa clicar "deploy." Previne
+deploys acidentais a partir de merge commits. O `needs: [build]` garante que o job de deploy só
+aparece após um build bem-sucedido.
 
-### 7.10 Why Build on MRs is `when: manual`?
+### 7.10 Por que Build em MRs é `when: manual`?
 
-MR builds consume Docker-in-Docker runner time and push to the registry. Making them manual
-saves resources while still allowing a manual build test when needed. No `allow_failure`
-because if someone triggers it, the result matters.
+Builds de MR consomem tempo de runner Docker-in-Docker e fazem push para o registry. Torná-los manual
+economiza recursos enquanto ainda permite um teste de build manual quando necessário. Sem `allow_failure`
+porque se alguém aciona, o resultado importa.
 
-### 7.11 Why `datetime.now(UTC)` not `datetime.utcnow()`?
+### 7.11 Por que `datetime.now(UTC)` não `datetime.utcnow()`?
 
-`utcnow()` returns a naive datetime (no timezone info), deprecated since Python 3.12.
-`datetime.now(UTC)` returns a timezone-aware datetime, recommended by PEP 685. Ruff's
-UP017 rule catches this automatically.
+`utcnow()` retorna um datetime naive (sem info de timezone), deprecated desde Python 3.12.
+`datetime.now(UTC)` retorna um datetime timezone-aware, recomendado pelo PEP 685. A regra
+UP017 do ruff captura isso automaticamente.
 
-### 7.12 Why DynamoDB State Locking?
+### 7.12 Por que DynamoDB State Locking?
 
-Concurrent `terraform apply` from different CI jobs or developers can corrupt state.
-DynamoDB provides a distributed lock — only one apply can run at a time. Without it,
-state file corruption is a matter of when, not if.
+`terraform apply` concorrente de diferentes jobs CI ou desenvolvedores pode corromper o state.
+DynamoDB fornece um lock distribuído — apenas um apply pode rodar por vez. Sem ele,
+corrupção do arquivo de state é questão de quando, não se.
 
-### 7.13 Why Shell-only healthcheck.sh?
+### 7.13 Por que healthcheck.sh shell-only?
 
-A healthcheck that depends on Python is useless if Python itself is broken. The external
-healthcheck uses only `wget` + `grep` (available in any Alpine/busybox environment),
-validates HTTP 200 + body content, and works in CI pipelines or monitoring systems.
+Um healthcheck que depende de Python é inútil se o próprio Python está quebrado. O healthcheck
+externo usa apenas `wget` + `grep` (disponíveis em qualquer ambiente Alpine/busybox),
+valida HTTP 200 + conteúdo do corpo, e funciona em pipelines CI ou sistemas de monitoramento.
 
-### 7.14 Why `force_new_deployment = true` on ECS Service?
+### 7.14 Por que `force_new_deployment = true` no ECS Service?
 
-Ensures that when the task definition changes (new image tag), the service immediately
-starts replacing old tasks. Without it, ECS might wait for natural task cycling.
+Garante que quando o task definition muda (nova tag de imagem), o service imediatamente
+começa a substituir tasks antigas. Sem ele, o ECS pode esperar pelo cycling natural das tasks.
 
-### 7.15 Why `lifecycle { ignore_changes = [desired_count] }`?
+### 7.15 Por que `lifecycle { ignore_changes = [desired_count] }`?
 
-Allows autoscaling (or manual count changes in the AWS console) without Terraform
-overwriting the desired count back to the variable default on the next `terraform apply`.
-
----
-
-## 8. LIMITS — What This Project Does NOT Do
-
-1. **No VPC creation** — Uses default VPC with public subnets. ECS tasks use `assign_public_ip=true` to pull images. Production would use private subnets + NAT Gateway.
-2. **No real deploy** — Deploy stage echoes commands instead of executing them. Real deploy needs AWS CLI + credentials.
-3. **No HTTPS** — ALB listener is HTTP only. Production needs ACM certificate + HTTPS listener + HTTP→HTTPS redirect.
-4. **No autoscaling** — Fixed desired_count=2. Production needs ECS Service autoscaling on CPU/memory.
-5. **No image scanning** — No Trivy or ECR scan before deploy. Production blocks images with critical CVEs.
-6. **No secrets management** — No Secrets Manager/SSM. Not needed yet (no secrets), but would be for DB creds.
-7. **No monitoring/alerting** — CloudWatch Logs exist, but no Alarms or SNS notifications.
-8. **No staging environment** — Only a production environment definition.
-9. **No integration tests** — Tests use Flask test_client, not real HTTP requests to a running container.
-10. **No Terraform pipeline** — No `terraform fmt/validate/plan` in CI. Documented in "O que faria diferente."
+Permite autoscaling (ou mudanças manuais de count no console AWS) sem que o Terraform
+sobrescreva o desired count de volta para o default da variável no próximo `terraform apply`.
 
 ---
 
-## 9. AI USAGE — Transparent Record
+## 8. LIMITES — O Que Este Projeto NÃO Faz
 
-### Tools Used
-- **opencode** (CLI) with **GLM-5.1** model — primary coding assistant
-- **Qwen 3.5 397b** — secondary review
-- A "judge" agent — final verification pass
-
-### What AI Generated (then human corrected)
-
-| Item | AI Output | Human Correction | Severity |
-|------|-----------|-----------------|----------|
-| Dockerfile | Healthcheck without status code validation | Added `assert r.status==200` | HIGH — false-positive health |
-| App.py | `datetime.utcnow()` (deprecated) | `datetime.now(UTC)` (PEP 685) | MEDIUM — deprecated API |
-| CI/CD | `|| true` on SAST, `allow_failure` on build, no workflow.rules | Removed `|| true`, removed allow_failure, added workflow.rules | HIGH — false-green pipeline |
-| Terraform | `arn:aws:iam:::aws:policy/...` (extra colon) | `arn:aws:iam::aws:policy/...` | CRITICAL — terraform plan fails |
-| Terraform | Single SG, container port open to 0.0.0.0/0 | Separate ALB/ECS SGs with cross-references | CRITICAL — ALB bypass |
-| Terraform | Outputs duplicated between ecs.tf and outputs.tf | Removed duplicates from ecs.tf | LOW — terraform validate fails |
-| Healthcheck.sh | Python3 dependency | Rewrote with wget+grep only | MEDIUM — breaks without Python |
-| README | Missing Terraform instructions, no GitLab self-hosted notes, generic AI section | Added all three with specifics | LOW — incomplete docs |
-| Terraform | `readonlyRootFilesystem=false` | Set to `true` | HIGH — contradictory to "hardened" claim |
-
-### Key Lesson
-
-IA accelerates scaffolding but produces errors that look correct. The most dangerous bugs
-(IAM ARN, security group bypass, healthcheck false-positive) would pass casual review.
-Line-by-line verification and actual execution (`terraform plan`, `pytest`, `ruff check`)
-are non-negotiable.
+1. **Sem criação de VPC** — Usa VPC default com subnets públicas. Tasks ECS usam `assign_public_ip=true` para fazer pull de imagens. Produção usaria subnets privadas + NAT Gateway.
+2. **Sem deploy real** — Stage de deploy imprime comandos ao invés de executá-los. Deploy real precisa de AWS CLI + credenciais.
+3. **Sem HTTPS** — Listener do ALB é HTTP apenas. Produção precisa de certificado ACM + listener HTTPS + redirect HTTP→HTTPS.
+4. **Sem autoscaling** — desired_count fixo=2. Produção precisa de autoscaling do ECS Service por CPU/memória.
+5. **Sem image scanning** — Sem Trivy ou ECR scan antes do deploy. Produção bloqueia imagens com CVEs críticas.
+6. **Sem secrets management** — Sem Secrets Manager/SSM. Ainda não necessário (sem secrets), mas seria para creds de DB.
+7. **Sem monitoramento/alertas** — CloudWatch Logs existem, mas sem Alarms ou notificações SNS.
+8. **Sem ambiente de staging** — Apenas definição de ambiente de produção.
+9. **Sem testes de integração** — Testes usam Flask test_client, não requests HTTP reais para um container rodando.
+10. **Sem pipeline Terraform** — Sem `terraform fmt/validate/plan` no CI. Documentado em "O que faria diferente."
 
 ---
 
-## 10. VERIFICATION CHECKLIST — For AI or Human Reviewer
+## 9. USO DE IA — Registro Transparente
 
-Use this checklist to verify every deliverable against the challenge PDF:
+### Ferramentas Utilizadas
+- **opencode** (CLI) com modelo **GLM-5.1** — assistente principal de codificação
+- **Qwen 3.5 397b** — revisão secundária
+- Agente "juiz" — verificação final
 
-### Application
-- [ ] `app.py` has `/health` endpoint returning JSON with status, timestamp, version
-- [ ] `app.py` has `/` endpoint returning JSON welcome message
-- [ ] `app.py` uses timezone-aware timestamps (not deprecated `utcnow()`)
-- [ ] `test_app.py` has unit tests for both endpoints
-- [ ] `requirements.txt` has only runtime deps (flask)
-- [ ] `requirements-dev.txt` has dev/test deps (pytest, ruff, bandit)
-- [ ] `ruff.toml` defines explicit lint rules (not bare defaults)
+### O Que a IA Gerou (e humano corrigiu)
+
+| Item | Output da IA | Correção Humana | Severidade |
+|------|-------------|-----------------|------------|
+| Dockerfile | Healthcheck sem validação de status code | Adicionado `assert r.status==200` | ALTA — health falso-positivo |
+| App.py | `datetime.utcnow()` (deprecated) | `datetime.now(UTC)` (PEP 685) | MÉDIA — API deprecated |
+| CI/CD | `|| true` no SAST, `allow_failure` no build, sem workflow.rules | Removido `|| true`, removido allow_failure, adicionado workflow.rules | ALTA — pipeline falso-verde |
+| Terraform | `arn:aws:iam:::aws:policy/...` (dois-pontos extra) | `arn:aws:iam::aws:policy/...` | CRÍTICA — terraform plan falha |
+| Terraform | SG única, porta do container aberta para 0.0.0.0/0 | SGs separadas ALB/ECS com referências cruzadas | CRÍTICA — bypass do ALB |
+| Terraform | Outputs duplicados entre ecs.tf e outputs.tf | Removidos duplicados de ecs.tf | BAIXA — terraform validate falha |
+| Healthcheck.sh | Dependência de Python3 | Reescrito com wget+grep apenas | MÉDIA — quebra sem Python |
+| README | Faltando instruções Terraform, notas GitLab self-hosted, seção IA genérica | Adicionados todos três com específicos | BAIXA — docs incompletas |
+| Terraform | `readonlyRootFilesystem=false` | Alterado para `true` | ALTA — contraditório com claim "hardened" |
+
+### Lição Principal
+
+IA acelera scaffolding mas produz erros que parecem corretos. Os bugs mais perigosos
+(IAM ARN, bypass de security group, healthcheck falso-positivo) passariam em revisão casual.
+Verificação linha a linha e execução real (`terraform plan`, `pytest`, `ruff check`)
+são inegociáveis.
+
+---
+
+## 10. CHECKLIST DE VERIFICAÇÃO — Para Revisor IA ou Humano
+
+Use este checklist para verificar cada entregável contra o PDF do desafio:
+
+### Aplicação
+- [ ] `app.py` tem endpoint `/health` retornando JSON com status, timestamp, version
+- [ ] `app.py` tem endpoint `/` retornando JSON com mensagem de boas-vindas
+- [ ] `app.py` usa timestamps com timezone (não `utcnow()` deprecated)
+- [ ] `test_app.py` tem testes unitários para ambos endpoints
+- [ ] `requirements.txt` tem apenas deps de runtime (flask)
+- [ ] `requirements-dev.txt` tem deps dev/test (pytest, ruff, bandit)
+- [ ] `ruff.toml` define regras de lint explícitas (não defaults puros)
 
 ### Docker
-- [ ] `Dockerfile` uses multi-stage build (builder + runtime)
-- [ ] `Dockerfile` uses Alpine base image
-- [ ] `Dockerfile` creates and uses non-root user `appuser`
-- [ ] `Dockerfile` has HEALTHCHECK that validates HTTP 200 (not just connectivity)
-- [ ] `Dockerfile` uses BuildKit cache mount for pip downloads
-- [ ] `docker-compose.yml` mirrors Dockerfile healthcheck
-- [ ] `.dockerignore` excludes tests, terraform, CI config, ruff.toml, README, requirements-dev.txt, .ruff_cache
+- [ ] `Dockerfile` usa multi-stage build (builder + runtime)
+- [ ] `Dockerfile` usa imagem base Alpine
+- [ ] `Dockerfile` cria e usa usuário não-root `appuser`
+- [ ] `Dockerfile` tem HEALTHCHECK que valida HTTP 200 (não apenas conectividade)
+- [ ] `docker-compose.yml` espelha healthcheck do Dockerfile
+- [ ] `.dockerignore` exclui testes, terraform, config CI, ruff.toml, README, requirements-dev.txt, .ruff_cache
 
-### CI/CD Pipeline
-- [ ] `.gitlab-ci.yml` has 4 stages: lint, test, build, deploy
-- [ ] Lint job uses ruff with explicit config
-- [ ] Test job uses pytest
-- [ ] SAST job uses bandit (bonus) with `allow_failure: true` (non-blocking by design) and JSON artifact
-- [ ] Build job uses Docker-in-Docker with BuildKit enabled
-- [ ] Build pushes to GitLab Container Registry with SHA + latest tags
-- [ ] Build on main and tags is automatic; on MR is manual
-- [ ] Tags produce release images (tag name as image tag)
-- [ ] Deploy is main-only with `when: manual`
-- [ ] Deploy has `needs: [build]`
-- [ ] `workflow.rules` prevent duplicate pipelines
-- [ ] Cache is keyed on requirements.txt + requirements-dev.txt hash + job name prefix
+### Pipeline CI/CD
+- [ ] `.gitlab-ci.yml` tem 4 stages: lint, test, build, deploy
+- [ ] Job de lint usa ruff com config explícita
+- [ ] Job de test usa pytest
+- [ ] Job de SAST usa bandit (bônus) com `allow_failure: true` (não-bloqueante por design) e artefato JSON
+- [ ] Job de build usa Docker-in-Docker com BuildKit habilitado
+- [ ] Build faz push para GitLab Container Registry com tags SHA + latest
+- [ ] Build em main e tags é automático; em MR é manual
+- [ ] Tags geram imagens de release (nome da tag como image tag)
+- [ ] Deploy é main-only com `when: manual`
+- [ ] Deploy tem `needs: [build]`
+- [ ] `workflow.rules` previnem pipelines duplicados
+- [ ] Cache é keyado em hash de requirements.txt + requirements-dev.txt + prefixo do job name
 
 ### Terraform
-- [ ] `main.tf` configures AWS provider with S3 backend + DynamoDB locking
-- [ ] `variables.tf` has all 7 variables typed and documented
-- [ ] `ecs.tf` creates: VPC data sources, ALB SG, ECS SG, ALB, target group, listener, ECS cluster, log group, IAM role, task definition, ECS service
-- [ ] ALB SG: ingress HTTP/80 from 0.0.0.0/0, egress only to ECS SG on container port
-- [ ] ECS SG: ingress only from ALB SG on container port, egress 0.0.0.0/0
-- [ ] Task definition: Fargate, awsvpc, readonlyRootFilesystem=true, user=appuser, healthCheck with 200 validation (defense-in-depth)
+- [ ] `main.tf` configura provider AWS com backend S3 + locking DynamoDB
+- [ ] `variables.tf` tem todas 7 variáveis tipadas e documentadas
+- [ ] `ecs.tf` cria: data sources de VPC, ALB SG, ECS SG, ALB, target group, listener, cluster ECS, log group, IAM role, task definition, ECS service
+- [ ] ALB SG: ingress HTTP/80 de 0.0.0.0/0, egress apenas para ECS SG na porta do container
+- [ ] ECS SG: ingress apenas do ALB SG na porta do container, egress 0.0.0.0/0
+- [ ] Task definition: Fargate, awsvpc, readonlyRootFilesystem=true, user=appuser, healthCheck com validação 200 (defense-in-depth)
 - [ ] ECS service: assign_public_ip=true, depends_on ALB listener, lifecycle ignore_changes desired_count
-- [ ] IAM role ARN is correct: `arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy`
-- [ ] `outputs.tf` provides alb_dns_name, ecs_cluster_name, ecs_service_name
+- [ ] IAM role ARN está correto: `arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy`
+- [ ] `outputs.tf` fornece alb_dns_name, ecs_cluster_name, ecs_service_name
 
-### Documentation
-- [ ] README has: how to run locally (3 options), pipeline explanation, repo structure, technical decisions, "what I'd do differently", Terraform usage, AI usage with specific bug examples
-- [ ] AI usage section lists at least 6 specific items with AI output vs human correction
-- [ ] README tree matches actual file tree (including ruff.toml)
+### Documentação
+- [ ] README tem: como rodar localmente (3 opções), explicação do pipeline, estrutura do repo, decisões técnicas, "o que faria diferente", uso do Terraform, uso de IA com exemplos específicos de bugs
+- [ ] Seção de uso de IA lista pelo menos 6 itens específicos com output da IA vs correção humana
+- [ ] Árvore do README corresponde à árvore real de arquivos (incluindo ruff.toml)
 
-### Git History
-- [ ] Commits tell a believable story: evening build → morning review → hardening → polish
-- [ ] v1 commits contain real bugs visible via `git show` or `git diff`
-- [ ] Fix commits reference what was fixed
-- [ ] No secrets or credentials in any commit
+### Histórico Git
+- [ ] Commits contam uma história crível: build noturno → revisão matinal → hardening → polimento
+- [ ] Commits v1 contêm bugs reais visíveis via `git show` ou `git diff`
+- [ ] Commits de fix referenciam o que foi corrigido
+- [ ] Sem secrets ou credenciais em qualquer commit
 
 ---
 
-## 11. QUICK REFERENCE — Commands to Verify
+## 11. REFERÊNCIA RÁPIDA — Comandos para Verificação
 
 ```bash
 # Lint
 ruff check app.py test_app.py --config ruff.toml
 ruff format --check app.py test_app.py --config ruff.toml
 
-# Test
+# Testes
 pytest test_app.py -v --tb=short
 
 # Docker
@@ -421,18 +478,18 @@ curl http://localhost:5000/health
 curl http://localhost:5000/
 ./healthcheck.sh
 
-# Terraform (requires terraform binary + AWS credentials)
+# Terraform (requer binário terraform + credenciais AWS)
 cd terraform
 terraform init -backend=false
 terraform validate
 terraform plan
 
-# Git history
+# Histórico git
 git log --oneline
-git diff 6f33c32..f105d47   # v1 → morning review fixes
-git diff f105d47..5589b53   # morning review → hardening
-git diff 5589b53..cfed349   # hardening → final polish
-git diff cfed349..HEAD      # audit rounds (external review fixes)
+git diff 6f33c32..f105d47 # v1 → fixes da revisão matinal
+git diff f105d47..5589b53 # revisão matinal → hardening
+git diff 5589b53..cfed349 # hardening → polimento final
+git diff cfed349..HEAD # rounds de auditoria (fixes de revisão externa)
 ```
 
 ---

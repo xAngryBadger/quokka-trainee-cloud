@@ -1,10 +1,12 @@
-# Audit-Driven Learning Journey — Trainee Cloud & IA: API Flask de health check com pipeline CI/CD completo, containerização Docker e infraestrutura como código para deploy no AWS ECS.
+# 🦘 Quokka — Trainee Cloud & IA
 
-[![Build](https://gitlab.com/badger/quokka/badges/main/pipeline.svg)](https://gitlab.com/badger/quokka/-/pipelines)
+API Flask de health check com pipeline CI/CD completo, containerização Docker e infraestrutura como código para deploy no AWS ECS.
+
+[![Build](https://github.com/xAngryBadger/quokka-trainee-cloud/actions/workflows/ci.yml/badge.svg)](https://github.com/xAngryBadger/quokka-trainee-cloud)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
 [![Version](https://img.shields.io/badge/version-1.0.0-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
-[![⚠️ Rate Limit: Memory-Only](https://img.shields.io/badge/rate_limit-memory--only-yellow)](#rate-limiting-limitations)
+[![⚠️ Rate Limit: Memory-Only](https://img.shields.io/badge/rate_limit-memory--only-yellow)](#rate-limiting-limitacoes)
 
 ---
 
@@ -45,69 +47,69 @@ curl http://localhost:5000/health
 curl http://localhost:5000/
 ```
 
-## API Examples
+## Exemplos da API
 
-### Health Check Endpoint
+### Endpoint de Health Check
 
 ```bash
-# Basic health check
+# Health check básico
 curl -X GET http://localhost:5000/health
 
-# With verbose output
+# Com output verboso
 curl -v http://localhost:5000/health
 
-# With timing information
-curl -w "\nTime: %{time_total}s\n" http://localhost:5000/health
+# Com informações de tempo
+curl -w "\nTempo: %{time_total}s\n" http://localhost:5000/health
 ```
 
-Expected response:
+Resposta esperada:
 ```json
 {
-  "status": "healthy",
-  "timestamp": "2024-01-01T00:00:00.000000+00:00",
-  "version": "1.0.0"
+"status": "healthy",
+"timestamp": "2024-01-01T00:00:00.000000+00:00",
+"version": "1.0.0"
 }
 ```
 
-### Root Endpoint
+### Endpoint Raiz
 
 ```bash
-# Basic root endpoint
+# Endpoint raiz básico
 curl -X GET http://localhost:5000/
 
-# With headers
+# Com headers
 curl -H "Accept: application/json" http://localhost:5000/
 ```
 
-Expected response:
+Resposta esperada:
 ```json
 {
-  "message": "Trainee DevOps API"
+"message": "Trainee DevOps API"
 }
 ```
 
-### Error Handling Examples
+### Exemplos de Tratamento de Erros
 
 ```bash
-# Test 404 - Not Found
+# Teste 404 - Não Encontrado
 curl -X GET http://localhost:5000/nonexistent
 
-# Test rate limiting (send 11+ requests in quick succession)
+# Teste de rate limiting (envie 11+ requisições em rápida sucessão)
 for i in {1..15}; do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5000/health; done
 ```
 
-### Rate Limiting Test
+### Teste de Rate Limiting
 
 ```bash
-# Default limit: 100 requests per hour, 10 per minute per endpoint
-# Test rate limit on /health endpoint (limit: 10 per minute)
-for i in {1..12}; do 
-  echo -n "Request $i: "
-  curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5000/health
+# Limite padrão: 100 requisições por hora, 10 por minuto por endpoint
+# Teste rate limit no endpoint /health (limite: 10 por minuto)
+for i in {1..12}; do
+echo -n "Requisição $i: "
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5000/health
 done
 ```
 
-Expected: First 10 requests return 200, subsequent requests return 429 (Too Many Requests)
+Esperado: Primeiras 10 requisições retornam 200, requisições subsequentes retornam 429 (Too Many Requests).
 
 Ou use o script de healthcheck (sem dependência de Python, funciona com wget apenas):
 
@@ -240,11 +242,11 @@ Alpine (~50MB base) vs slim (~120MB base). Para uma API Flask simples sem depend
 
 ### BuildKit Cache Mounts
 
-O Dockerfile usa `--mount=type=cache,target=/root/.cache/pip` no `pip install` do builder. Isso permite que o Docker reutilize o cache de downloads do pip entre builds, mesmo que a camada de requirements.txt seja invalidada por outros motivos. Requer `DOCKER_BUILDKIT=1` (habilitado no pipeline CI).
+O Dockerfile anteriormente usava `--mount=type=cache,target=/root/.cache/pip` no `pip install` do builder para reutilizar o cache de downloads do pip entre builds. Isso foi **removido** por questões de compatibilidade — o Dockerfile atual usa `pip install --prefix=/install` padrão. No pipeline CI, `DOCKER_BUILDKIT=1` está habilitado para futuras otimizações de cache.
 
 ### Usuário Não-root
 
-Container roda como `appuser`. Se um atacante comprometer a aplicação, terá acesso limitado — sem privilícios de root. O ECS task definition também especifica `"user": "appuser"` para garantir que o runtime respeite isso.
+Container roda como `appuser`. Se um atacante comprometer a aplicação, terá acesso limitado — sem privilégios de root. O ECS task definition também especifica `"user": "appuser"` para garantir que o runtime respeite isso.
 
 ### Servidor de Desenvolvimento Flask
 
@@ -260,18 +262,13 @@ CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "
 
 Este projeto é um **desafio de trainee** com limitações intencionais para focar em CI/CD e IaC. Abaixo, o que **NÃO** foi implementado e o porquê:
 
-#### ⚠️ Rate Limiting (Demonstration Only - Not Production-Ready)
+#### ⚠️ Rate Limiting (Apenas Demonstração — Não Pronto para Produção)
 
-> **WARNING:** This rate limiting implementation uses in-memory storage (`memory://`). 
-> In production with multiple ECS tasks, each container tracks its own limits independently.
-> A client can bypass limits by hitting different containers. 
-> **For production:** Use Redis (`storage_uri="redis://..."`) or API Gateway rate limiting.
-> This implementation is for **demonstration and learning purposes only**.
-
-**Limitação:** O rate limiter usa `storage_uri="memory://"` que armazena contadores na memória local. Em produção com múltiplas réplicas ECS, isso significa:
-- Cada container tem seus próprios contadores de rate limit
-- Um cliente pode fazer 100 requests/hour **por container**, não no total
-- Para rate limiting global, use Redis: `storage_uri="redis://..."`
+> **AVISO:** Esta implementação de rate limiting usa armazenamento em memória (`memory://`).
+> Em produção com múltiplas tasks ECS, cada container rastreia seus próprios limites independentemente.
+> Um cliente pode burlar os limites atingindo containers diferentes.
+> **Para produção:** Use Redis (`storage_uri="redis://..."`) ou rate limiting via API Gateway.
+> Esta implementação é para **demonstração e aprendizado apenas**.
 
 **Limitação:** O rate limiter usa `storage_uri="memory://"` que armazena contadores na memória local. Em produção com múltiplas réplicas ECS, isso significa:
 - Cada container tem seus próprios contadores de rate limit
