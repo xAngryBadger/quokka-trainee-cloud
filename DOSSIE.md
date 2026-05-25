@@ -72,11 +72,11 @@ Internet
 Push / MR Event
 │
 ▼
-┌──────────┐ ┌──────────┐ ┌──────────┐
-│ LINT │────▶│ TEST │────▶│ BUILD │────▶ DEPLOY
-│ ruff │ │ pytest │ │ docker │ (manual,
-│ │ │ bandit │ │ push │ main only)
-└──────────┘ │ (SAST) │ └──────────┘
+┌──────────┐ ┌──────────┐ ┌──────────────┐ ┌──────────┐
+│ LINT │────▶│ TEST │────▶│VALIDATE-INFRA│──▶│ BUILD │──▶ DEPLOY
+│ ruff │ │ pytest │ │ terraform    │  │ docker │ (manual,
+│ │ │ bandit │ │ fmt/validate/plan│ │ push │ main only)
+└──────────┘ │ (SAST) │ └──────────────┘ └──────────┘
 └──────────┘
 ```
 
@@ -93,10 +93,10 @@ Push / MR Event
 | Pipeline | `|| true` no SAST, `allow_failure` no build | `--severity-level high`, build falha se falhar | Sem mais falsos-verdes |
 | Pipeline | Sem workflow.rules (pipelines duplicados) | `workflow.rules` para MR/main/tags apenas | Economiza runner minutes |
 | Lint | `ruff check` sem configuração | `ruff.toml` com 8 categorias de regras explícitas | Padrões de lint documentados e reprodutíveis |
-| Python | `datetime.utcnow()` (deprecated) | `datetime.now(UTC)` (PEP 685) | Timestamps com timezone |
+| Python | `datetime.utcnow()` (deprecated) | `datetime.now(UTC)` (Python 3.11+) | Timestamps com timezone |
 | State | Sem locking | Backend S3 + tabela de lock DynamoDB | Previne corrupção concorrente do state |
 | Rede | Sem `assign_public_ip` no ECS service | `assign_public_ip = true` no network_configuration | Tasks podem fazer pull de imagens do registry em subnets públicas |
-| Build | Sem cache BuildKit | `--mount=type=cache` para downloads pip | Rebuilds mais rápidos em mudanças de dependência |
+| Build | Sem cache BuildKit | `pip install --prefix=/install` sem cache mount | Rebuilds padrão do pip |
 
 ---
 
@@ -149,7 +149,7 @@ quokka/
 │ # Environment, ManagedBy). Backend S3 com tabela de lock DynamoDB.
 │ # Requer Terraform >= 1.5.0.
 │
-├── variables.tf # 7 variáveis: aws_region, environment, app_name, container_image, container_port,
+├── variables.tf # 8 variáveis: aws_region, environment, app_name, container_image, container_port,
 │ # cpu, memory, desired_count. Todas tipadas, descritas, com defaults seguros para produção.
 │
 ├── ecs.tf # Infraestrutura principal: data sources de VPC, SGs separadas alb_sg + ecs_sg (ingress apenas
@@ -160,64 +160,6 @@ quokka/
 │
 └── outputs.tf # 3 outputs: alb_dns_name (URL do endpoint), ecs_cluster_name, ecs_service_name.
 │ # Mínimo mas suficiente para verificação e referência downstream.
-```
-quokka/
-├── app.py                    # Flask API: two endpoints (/health returns JSON status+timestamp+version,
-│                             # / returns welcome message). Uses datetime.UTC (3.12+), runs on 0.0.0.0:5000
-│                             # with S104 noqa. Non-root user enforced in Dockerfile and ECS task definition.
-│
-├── test_app.py               # Pytest unit tests: test_health verifies /health returns 200 + status=healthy,
-│                             # test_index verifies / returns 200. Uses Flask test_client — no HTTP server needed.
-│
-├── requirements.txt          # Runtime dependency only: flask==3.0.0. Installed by Dockerfile — no
-│                             # pytest/ruff/bandit in the production image. Minimizes attack surface.
-│
-├── requirements-dev.txt     # Development dependencies: pytest, ruff, bandit. Used by CI jobs and local
-│                             # testing. Excluded from Docker build via .dockerignore.
-│
-├── ruff.toml                 # Linter configuration: selects E/W/F/I/UP/B/SIM/C4/S rule categories,
-│                             # targets Python 3.12, ignores S101 (assert in tests), sets isort known-first-party.
-│                             # Documents what we consider an error and why — no blind defaults.
-│
-├── Dockerfile                # Multi-stage build: builder stage installs deps with BuildKit pip cache mount,
-│                             # runtime stage copies only install output. Non-root appuser, HEALTHCHECK with
-│                             # HTTP 200 validation, EXPOSE 5000. Alpine base for minimal attack surface.
-│
-├── docker-compose.yml        # Local development: builds from Dockerfile, maps port 5000, healthcheck matches
-│                             # Dockerfile (HTTP 200 + assert), restart unless-stopped. No volume mounts needed.
-│
-├── healthcheck.sh            # Shell-only health check: wget + grep, no Python dependency. Validates both HTTP
-│                             # status code 200 and body contains "status":"healthy". Busybox-compatible (Alpine).
-│                             # Accepts optional HOST and PORT arguments for external monitoring.
-│
-├── .gitlab-ci.yml # 4-stage pipeline (lint→test→build→deploy) + bonus SAST. workflow.rules prevent
-│                             # duplicate pipelines. Cache keyed on requirements.txt + requirements-dev.txt
-│                             # hash + job name prefix. Build on main/tags auto, on MR manual. Tags produce
-│                             # release images. Deploy main-only, manual gate with needs:[build].
-│
-├── .dockerignore # Excludes test_app.py, terraform/, .gitlab-ci.yml, healthcheck.sh, ruff.toml,
-│                             # requirements-dev.txt, DOSSIE.md, README, .gitignore, .ruff_cache, venvs,
-│                             # __pycache__, bandit report from Docker build context.
-│
-├── .gitignore # Excludes __pycache__, .pyc/.pyo, .env, .venv, venv, egg-info, dist, build,
-│                             # .idea, .vscode, .ruff_cache, .pytest_cache, bandit-report.json.
-│
-└── terraform/
-    ├── main.tf               # Provider config: AWS ~>5.0, region from variable, default tags (Project,
-    │                             # Environment, ManagedBy). S3 backend with DynamoDB locking table.
-    │                             # Requires Terraform >= 1.5.0.
-    │
-    ├── variables.tf          # 7 variables: aws_region, environment, app_name, container_image, container_port,
-    │                             # cpu, memory, desired_count. All typed, described, with production-safe defaults.
-    │
-    ├── ecs.tf                # Core infrastructure: VPC data sources, separate alb_sg + ecs_sg (ingress only
-    │                             # from ALB), ALB + target group + listener, ECS cluster with Container Insights,
-    │                             # CloudWatch log group (7-day retention), IAM task execution role with correct ARN,
-    │                             # task definition (Fargate, awsvpc, readonlyRootFilesystem=true, appuser, healthCheck),
-    │                             # ECS service with LB integration, depends_on, and lifecycle ignore_changes.
-    │
-    └── outputs.tf            # 3 outputs: alb_dns_name (endpoint URL), ecs_cluster_name, ecs_service_name.
-                                  # Minimal but sufficient for verification and downstream reference.
 ```
 
 ---
@@ -331,7 +273,7 @@ porque se alguém aciona, o resultado importa.
 ### 7.11 Por que `datetime.now(UTC)` não `datetime.utcnow()`?
 
 `utcnow()` retorna um datetime naive (sem info de timezone), deprecated desde Python 3.12.
-`datetime.now(UTC)` retorna um datetime timezone-aware, recomendado pelo PEP 685. A regra
+`datetime.now(UTC)` retorna um datetime timezone-aware, recomendado para Python 3.11+. A regra
 UP017 do ruff captura isso automaticamente.
 
 ### 7.12 Por que DynamoDB State Locking?
@@ -369,7 +311,7 @@ sobrescreva o desired count de volta para o default da variável no próximo `te
 7. **Sem monitoramento/alertas** — CloudWatch Logs existem, mas sem Alarms ou notificações SNS.
 8. **Sem ambiente de staging** — Apenas definição de ambiente de produção.
 9. **Sem testes de integração** — Testes usam Flask test_client, não requests HTTP reais para um container rodando.
-10. **Sem pipeline Terraform** — Sem `terraform fmt/validate/plan` no CI. Documentado em "O que faria diferente."
+10. **Pipeline Terraform limitado** — Jobs `terraform-validate` e `terraform-plan` existem no CI, mas não rodam `terraform apply` automático. Documentado em "O que faria diferente."
 
 ---
 
@@ -385,7 +327,7 @@ sobrescreva o desired count de volta para o default da variável no próximo `te
 | Item | Output da IA | Correção Humana | Severidade |
 |------|-------------|-----------------|------------|
 | Dockerfile | Healthcheck sem validação de status code | Adicionado `assert r.status==200` | ALTA — health falso-positivo |
-| App.py | `datetime.utcnow()` (deprecated) | `datetime.now(UTC)` (PEP 685) | MÉDIA — API deprecated |
+| App.py | `datetime.utcnow()` (deprecated) | `datetime.now(UTC)` (Python 3.11+) | MÉDIA — API deprecated |
 | CI/CD | `|| true` no SAST, `allow_failure` no build, sem workflow.rules | Removido `|| true`, removido allow_failure, adicionado workflow.rules | ALTA — pipeline falso-verde |
 | Terraform | `arn:aws:iam:::aws:policy/...` (dois-pontos extra) | `arn:aws:iam::aws:policy/...` | CRÍTICA — terraform plan falha |
 | Terraform | SG única, porta do container aberta para 0.0.0.0/0 | SGs separadas ALB/ECS com referências cruzadas | CRÍTICA — bypass do ALB |

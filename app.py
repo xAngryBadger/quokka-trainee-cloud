@@ -29,17 +29,18 @@ def get_client_key():
 # Configura logging estruturado
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s %(levelname)s [%(name)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    stream=sys.stdout
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    stream=sys.stdout,
 )
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
 # Configura rate limiting
-# Nota: Armazenamento em memória significa que rate limits NÃO são compartilhados entre réplicas do container.
-# Para produção com múltiplas tasks ECS, use Redis: storage_uri="redis://..."
+# Nota: armazenamento em memória significa que rate limits
+# NÃO são compartilhados entre réplicas do container.
+# Para produção com múltiplas tasks ECS, use Redis.
 # Veja README para limitações e recomendações.
 limiter = Limiter(
     key_func=get_client_key,
@@ -57,7 +58,7 @@ app.logger.setLevel(logging.INFO)
 @app.before_request
 def log_request() -> None:
     """Registra requisições de entrada para observabilidade."""
-    logger.info(f"GET {request.path} from {request.remote_addr}")
+    logger.info(f"{request.method} {request.path} from {request.remote_addr}")
 
 
 @app.after_request
@@ -100,7 +101,7 @@ def health() -> tuple[Response, int] | Response:
         return jsonify(health_data)
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}", exc_info=True)
-        return jsonify({"error": "health_check_failed", "message": str(e)}), 500
+        return jsonify({"error": "health_check_failed"}), 500
 
 
 @app.route("/")
@@ -124,4 +125,4 @@ if __name__ == "__main__":
     # Produção usa Gunicorn (veja CMD do Dockerfile).
     # O servidor dev do Flask é single-threaded e não é production-ready.
     logger.warning("Running Flask dev server (NOT for production use)")
-    app.run(host="0.0.0.0", port=5000, debug=False) # noqa: S104
+    app.run(host="0.0.0.0", port=5000, debug=False)  # noqa: S104

@@ -101,9 +101,9 @@ terraform-validate:
   before_script:
     - terraform init -backend=false
   script:
-- terraform fmt -check -recursive
-- terraform validate
-- echo "Validação Terraform passou"
+    - terraform fmt -check -recursive
+    - terraform validate
+    - echo "Validação Terraform passou"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -118,6 +118,7 @@ terraform-plan:
   script:
     - terraform plan -out=tfplan
     - terraform show -no-color tfplan | tee tfplan.txt
+    - terraform show -json tfplan > tfplan.json
   artifacts:
     paths:
       - tfplan.txt

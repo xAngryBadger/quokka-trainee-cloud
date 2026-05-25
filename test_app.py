@@ -27,6 +27,7 @@ def test_404_error():
 def test_500_error_handler():
     """Testa handler de erro 500 retorna resposta correta."""
     from app import handle_error
+
     with app.test_request_context("/test"):
         response = handle_error(Exception("test error"))
         assert response[1] == 500

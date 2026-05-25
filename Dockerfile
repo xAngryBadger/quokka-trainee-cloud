@@ -68,7 +68,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 CMD python -c "import urllib.request; r=urllib.request.urlopen('http://localhost:5000/health'); assert r.status==200" || exit 1
 
 # CMD: Comando executado quando o container inicia
-# Ferramenta: Gunicorn (WSI Server de Produção)
+# Ferramenta: Gunicorn (WSGI Server de Produção)
 # Config: 2 workers, 4 threads cada, bound a 0.0.0.0:5000
 # Por quê Gunicorn? O servidor built-in do Flask é apenas para desenvolvimento. Gunicorn é estável,
 # lida com requisições concorrentes e é production-ready.

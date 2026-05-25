@@ -22,7 +22,7 @@ A aplicação estará disponível em `http://localhost:5000`.
 
 ### Opção 2: Docker Manual
 
-> **Nota:** O Dockerfile usa BuildKit cache mounts (`--mount=type=cache`). Requer Docker com BuildKit habilitado. Se o build falhar com "the --mount option requires BuildKit", instale o `docker-buildx` plugin ou use `DOCKER_BUILDKIT=1 docker build ...`.
+> **Nota:** O Dockerfile usava BuildKit cache mounts (`--mount=type=cache`) em versões anteriores, mas foi removido para compatibilidade. Requer Docker com BuildKit habilitado apenas se for re-adicionar cache mounts. Se o build falhar com "the --mount option requires BuildKit", instale o `docker-buildx` plugin ou use `DOCKER_BUILDKIT=1 docker build ...`.
 
 ```bash
 docker build -t trainee-devops-api .
@@ -383,7 +383,7 @@ O script de healthcheck externo usa apenas `wget` e `grep`, sem dependência de 
 
 ```bash
 aws s3 mb s3://terraform-state-trainee --region us-east-1
-aws dynamodb create-table --table-name terraform-locks --attribute-definitions AttributeName=LockID,AttributeType=S --key-schema AttributeName=LockID,KeyType=PROJECTION --billing-mode PAY_PER_REQUEST --region us-east-1
+aws dynamodb create-table --table-name terraform-locks --attribute-definitions AttributeName=LockID,AttributeType=S --key-schema AttributeName=LockID,KeyType=HASH --billing-mode PAY_PER_REQUEST --region us-east-1
 ```
 
 ### Comandos
@@ -455,7 +455,7 @@ Utilizei o **opencode** (CLI de IA para engenharia de software) com o modelo **G
 
 ### O que não funcionou
 
-- Erros críticos que parecavam corretos (IAM ARN, security groups, healthcheck)
+- Erros críticos que pareciam corretos (IAM ARN, security groups, healthcheck)
 - Falsos positivos no pipeline
 - Segurança superficial
 
