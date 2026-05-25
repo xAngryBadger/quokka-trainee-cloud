@@ -1,4 +1,4 @@
-# Trainee Cloud & IA — Desafio Técnico 2: API Flask de health check com pipeline CI/CD completo, containerização Docker e infraestrutura como código para deploy no AWS ECS.
+# Audit-Driven Learning Journey — Trainee Cloud & IA: API Flask de health check com pipeline CI/CD completo, containerização Docker e infraestrutura como código para deploy no AWS ECS.
 
 [![Build](https://gitlab.com/badger/quokka/badges/main/pipeline.svg)](https://gitlab.com/badger/quokka/-/pipelines)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
@@ -419,45 +419,39 @@ Em instâncias self-hosted do GitLab, o Container Registry pode não estar habil
 
 ## Como Usei IA Durante o Desafio
 
+Usei IA, cometi erros, fui auditado, e corrigi.
+
 ### Ferramenta
 
 Utilizei o **opencode** (CLI de IA para engenharia de software) com o modelo **GLM-5.1** como assistente durante todo o processo.
 
-### O que pedi a IA
+### O que aconteceu de verdade
 
-1. **Dockerfile** — Prompt: *"Gere um Dockerfile para a Flask API com multi-stage build, usuário não-root e healthcheck."* O resultado foi bom, mas o healthcheck apenas verificava conectividade sem validar o HTTP status code — eu corrigi para checar `assert r.status==200`. Também adicionei BuildKit cache mounts que a versão inicial não usava.
+1. **Dockerfile** — A IA gerou um healthcheck que apenas verificava conectividade, sem validar o HTTP status code. Eu precisei corrigir para `assert r.status==200`.
 
-2. **App.py** — Prompt: *"O código fornecido pelo desafio usa datetime.utcnow(), que está deprecated. Corrija para o equivalente moderno."* Substituí por `datetime.now(UTC)` que retorna timestamps timezone-aware, alinhado com as recomendações da PEP 685. **Modificações adicionais (além do base fornecido):**
-  - Adicionado logging estruturado com `logging.basicConfig` e formato ISO
-  - Adicionado `@app.before_request` para log de todas as requisições
-  - Adicionado `@app.after_request` para log de status de resposta
-  - Adicionado `@app.errorhandler(Exception)` para tratamento global de erros (500)
-  - Adicionado `@app.errorhandler(404)` para tratamento de rotas não encontradas
-  - Adicionado try/except em todos os endpoints para capturar exceções Estas mudanças vão além do base fornecido e são documentadas na seção "Decisões Técnicas".
+2. **App.py** — A IA usou `datetime.utcnow()` (deprecated). Eu corrigi para `datetime.now(UTC)`.
 
-3. **Pipeline CI/CD** — Prompt: *"Crie um .gitlab-ci.yml com stages de lint, test, build e deploy para a Flask API."* A IA gerou regras que causavam pipelines duplicados (MR event + branch push simultâneos) — eu adicionei `workflow.rules` para resolver. O SAST tinha `|| true` que tornava o scan inútil — corrigi para usar `--severity-level high`. O build em MRs tinha `allow_failure: true` que ocultava falhas — removi.
+3. **Pipeline CI/CD** — A IA gerou pipelines duplicados, SAST com `|| true` que tornava o scan inútil, e builds com `allow_failure: true`. Eu corrigi tudo.
 
-4. **Terraform para ECS** — Prompt: *"Gere infraestrutura Terraform para deploy desta API no AWS ECS Fargate com ALB, security groups e IAM."* A IA produziu um ARN de policy IAM com sintaxe inválida (`arn:aws:iam:::aws:policy/...` — um `:` a mais), outputs duplicados entre `ecs.tf` e `outputs.tf`, e um security group que abria a porta do container para `0.0.0.0/0`. Corrigi todos os três e separei as security groups.
+4. **Terraform** — A IA gerou ARN IAM inválido, outputs duplicados, e security groups abertos para `0.0.0.0/0`. Eu corrigi e separei as security groups.
 
-5. **Docker Compose e healthcheck.sh** — Prompt: *"Crie um docker-compose.yml e um script de healthcheck externo que não dependa de Python."* O healthcheck.sh inicial ainda dependia de `python3` para parsear JSON. Reescrevi usando `wget` + `grep` puro (shell).
+5. **Docker Compose e healthcheck.sh** — O healthcheck.sh inicial dependia de Python. Eu reescrevi com wget + grep puro.
 
-6. **README** — Prompt: *"Gere um README completo documentando a aplicação, pipeline, infraestrutura e uso de IA."* A IA não incluiu instruções para rodar o Terraform, não mencionou considerações para GitLab Self-Hosted, e a seção de IA era genérica — reescrevi com exemplos específicos dos bugs que encontrei e corrigi.
+6. **README** — A IA gerou documentação genérica. Eu reescrevi com exemplos específicos dos bugs.
 
-### O que funcionou bem
+### O que funcionou
 
-- **Boilerplate e scaffolding** — A IA é excelente para gerar a estrutura inicial de arquivos de configuração (Dockerfile, CI/CD, Terraform). Economizou horas de trabalho.
-- **Boas práticas automáticas** — Sem eu pedir explicitamente, a IA sugeriu multi-stage build, usuário não-root, healthcheck e cache no pipeline.
-- **Velocidade** — O que tomaria horas de pesquisa e escrita foi gerado em minutos, permitindo focar na revisão e correção.
+- Geração rápida de boilerplate
+- Sugestões de boas práticas (multi-stage, non-root user)
 
-### O que não funcionou tão bem
+### O que não funcionou
 
-- **Detalhes específicos de plataforma** — A IA gerou ARN IAM inválido, outputs duplicados no Terraform, e security groups que comprometiam a segurança do deploy ECS. Nenhum desses erros seria óbvio sem revisão manual cuidadosa.
-- **Healthcheck com intenção implícita** — A IA gerou healthchecks que verificavam conectividade mas não validavam explicitamente o HTTP status code. Embora `urlopen` lance `HTTPError` em 5xx, o `assert r.status==200` torna a intenção explícita e funciona como defense-in-depth se a exceção for suprimida por algum handler.
-- **CI/CD com falsos negativos** — O SAST com `|| true`, o build com `allow_failure: true`, e pipelines duplicados são antipadrões que parecem funcionais mas subvertem o propósito do pipeline.
-- **Segurança por aparência** — A IA gerou arquivos que *pareciam* seguros (security groups, non-root user) mas com configurações que neutralizavam a proteção (porta aberta para o mundo, healthcheck sem validação real).
+- Erros críticos que parecavam corretos (IAM ARN, security groups, healthcheck)
+- Falsos positivos no pipeline
+- Segurança superficial
 
 ### Aprendizados
 
-- **IA é uma aceleradora, não um substituto para revisão.** Os erros mais críticos (IAM ARN, security group, healthcheck falso-positivo) pareciam corretos à primeira vista. Só a revisão linha a linha os encontrou.
-- **Teste tudo.** O healthcheck.sh falha silenciosamente se python3 não existe; o Terraform falha no plan por ARN inválido; o pipeline aprova builds quebrados. Nada disso é óbvio sem execução real.
-- **Documentar os erros da IA é mais valioso que documentar os acertos.** Mostra que você entende o código, não apenas copiou.
+- IA acelera, mas não substitui revisão
+- Teste tudo
+- Documente os erros — mostram que você entende o código

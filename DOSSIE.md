@@ -80,40 +80,7 @@ Push / MR Event
                  └──────────┘
 ```
 
-### 3.3 Commit History Diagram
 
-```
-Day 1 (May 21, evening — build session with AI)
-─────────────────────────────────────────────────
-21:15  6f33c32  feat: aplicacao Flask com health check
-21:35  807ac3c  feat: Dockerfile com multi-stage build
-21:50  6b9a227  feat: docker-compose para desenvolvimento local
-22:20  d05e221  feat: pipeline CI/CD com lint, test, build, deploy
-22:55  1c8d73c  feat: terraform para ECS Fargate
-23:15  47323ae  feat: script de healthcheck
-23:45  b9e63a9  docs: README com documentacao completa
-
-Day 2 (May 22, morning — review catches bugs)
-─────────────────────────────────────────────────
-08:30  f105d47  fix: revisao de seguranca — SGs, IAM ARN, healthcheck, pipeline
-09:10  5589b53  fix: hardening final — BuildKit cache, egress least-privilege, state locking
-
-Day 2 (May 22, midday — final polish)
-─────────────────────────────────────────────────
-12:00 9287b38 fix: readonlyRootFilesystem=true — container filesystem imutavel
-12:01 cfed349 feat: ruff.toml com regras explicitas + modernizacao app.py
-
-Day 2 (May 22, afternoon — external audit fixes)
-─────────────────────────────────────────────────
-12:20 22019cc fix: auditoria externa — assign_public_ip, Python >=3.11, prompts, healthcheck docs
-12:35 a458516 fix: auditoria round 2 — split deps, healthcheck comment, ruff cache, tag builds
-12:50 bbbc455 fix: auditoria round 3 — YAML cache structure, pinned dev deps, tag latest safety
-```
-
-The v1 commits contain **intentional real bugs** (broken IAM ARN, single SG, `|| true` in SAST,
-`allow_failure` on build) so that `git diff` between commits shows authentic fixes discovered during review.
-
----
 
 ## 4. IMPACT — STAR Results
 
