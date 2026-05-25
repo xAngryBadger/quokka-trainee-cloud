@@ -4,6 +4,7 @@
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
 [![Version](https://img.shields.io/badge/version-1.0.0-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
+[![⚠️ Rate Limit: Memory-Only](https://img.shields.io/badge/rate_limit-memory--only-yellow)](#rate-limiting-limitations)
 
 ---
 
@@ -259,7 +260,18 @@ CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "
 
 Este projeto é um **desafio de trainee** com limitações intencionais para focar em CI/CD e IaC. Abaixo, o que **NÃO** foi implementado e o porquê:
 
-#### Rate Limiting com Armazenamento em Memória
+#### ⚠️ Rate Limiting (Demonstration Only - Not Production-Ready)
+
+> **WARNING:** This rate limiting implementation uses in-memory storage (`memory://`). 
+> In production with multiple ECS tasks, each container tracks its own limits independently.
+> A client can bypass limits by hitting different containers. 
+> **For production:** Use Redis (`storage_uri="redis://..."`) or API Gateway rate limiting.
+> This implementation is for **demonstration and learning purposes only**.
+
+**Limitação:** O rate limiter usa `storage_uri="memory://"` que armazena contadores na memória local. Em produção com múltiplas réplicas ECS, isso significa:
+- Cada container tem seus próprios contadores de rate limit
+- Um cliente pode fazer 100 requests/hour **por container**, não no total
+- Para rate limiting global, use Redis: `storage_uri="redis://..."`
 
 **Limitação:** O rate limiter usa `storage_uri="memory://"` que armazena contadores na memória local. Em produção com múltiplas réplicas ECS, isso significa:
 - Cada container tem seus próprios contadores de rate limit
