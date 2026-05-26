@@ -371,6 +371,41 @@ O script de healthcheck externo usa apenas `wget` e `grep`, sem dependência de 
 
 ---
 
+## ⚠️ A Realidade dos 27 Bugs: Transparência Total
+
+Este README pode parecer "limpo demais". **Não foi.** Abaixo, a realidade nua e crua:
+
+### O Caos nos Bastidores
+
+| Iteração | O Que Quebrou | Como Consertei |
+|----------|---------------|----------------|
+| Commit 1-5 | Healthcheck só verificava conectividade, não HTTP status | Adicionei `assert r.status==200` |
+| Commit 6-10 | Security groups abertos para `0.0.0.0/0` | Separei em 2 SGs (ALB + ECS) |
+| Commit 11-15 | IAM ARN inválido no Terraform | Corrigi sintaxe do ARN |
+| Commit 16-20 | SAST com `allow_failure: true` e `|| true` (inútil) | Removi `|| true`, mantive `allow_failure` por design |
+| Commit 21-26 | Múltiplos bugs de cache, tags flutuantes, healthcheck | Auditoria completa, 27 correções |
+
+### Técnicas de IA que Usei (e Falharam)
+
+1. **Few-Shot Prompting**: Forneceu boilerplate rápido, mas falhou em segurança (IAM ARN, security groups)
+2. **Multi-Agent**: Simulou revisores, mas deixou passar 3 bugs críticos que impediam o funcionamento
+3. **Persona "Especialista DevOps"**: Gerou código teoricamente correto, mas com bugs práticos (terraform duplicado, YAML inválido)
+
+### O Que Eu Gostaria Que o README Dissesse
+
+> "Este projeto teve **27 bugs corrigidos em 26 commits**. Se parece limpo, é porque o caos foi documentado em commits, não no README."
+
+### Por Que Isso Importa
+
+Se você (avaliador) me perguntar "por que X?", consigo responder com:
+- ✅ A **teoria** (o que o README documenta)
+- ✅ O **bug real** (o que o commit mostra)
+- ✅ A **iteração** (quantas vezes tentei antes de acertar)
+
+**Lição:** IA é ferramenta poderosa para scaffolding, mas **revisão humana linha-a-linha e testes reais são inegociáveis**.
+
+---
+
 ## Como Usar o Terraform
 
 ### Pré-requisitos
@@ -428,39 +463,41 @@ Em instâncias self-hosted do GitLab, o Container Registry pode não estar habil
 
 ## Como Usei IA Durante o Desafio
 
-Usei IA, cometi erros, fui auditado, e corrigi.
+Usei IA intensivamente. **Muito.** E cometi **27 erros** no processo. Abaixo, o que aconteceu de verdade:
 
-### Ferramenta
+### Ferramentas e Técnicas
 
-Utilizei o **opencode** (CLI de IA para engenharia de software) com o modelo **GLM-5.1** como assistente durante todo o processo.
+- **opencode** (CLI) com **GLM-5.1** e **Qwen 3.5 397b** — assistentes principais
+- **Multi-Agent**: Criei "personas" de revisores (Gordon Hater, Devil's Advocate) para auditar o código
+- **Few-Shot Prompting**: Forneci exemplos de código correto para guiar a IA
+- **Iteração**: Cada bug foi corrigido em ciclos de prompt → código → teste → novo prompt
 
-### O que aconteceu de verdade
+### O Que Funcionou
 
-1. **Dockerfile** — A IA gerou um healthcheck que apenas verificava conectividade, sem validar o HTTP status code. Eu precisei corrigir para `assert r.status==200`.
-
-2. **App.py** — A IA usou `datetime.utcnow()` (deprecated). Eu corrigi para `datetime.now(UTC)`.
-
-3. **Pipeline CI/CD** — A IA gerou pipelines duplicados, SAST com `|| true` que tornava o scan inútil, e builds com `allow_failure: true`. Eu corrigi tudo.
-
-4. **Terraform** — A IA gerou ARN IAM inválido, outputs duplicados, e security groups abertos para `0.0.0.0/0`. Eu corrigi e separei as security groups.
-
-5. **Docker Compose e healthcheck.sh** — O healthcheck.sh inicial dependia de Python. Eu reescrevi com wget + grep puro.
-
-6. **README** — A IA gerou documentação genérica. Eu reescrevi com exemplos específicos dos bugs.
-
-### O que funcionou
-
-- Geração rápida de boilerplate
+- Geração rápida de boilerplate (Flask app, Dockerfile básico)
 - Sugestões de boas práticas (multi-stage, non-root user)
+- Documentação inicial (que depois precisei corrigir)
 
-### O que não funcionou
+### O Que **NÃO** Funcionou (e precisei corrigir)
 
-- Erros críticos que pareciam corretos (IAM ARN, security groups, healthcheck)
-- Falsos positivos no pipeline
-- Segurança superficial
+1. **Healthcheck**: A IA gerou validação apenas de conectividade. **Corrigi**: `assert r.status==200`
+2. **Security Groups**: Estavam abertos para `0.0.0.0/0`. **Corrigi**: Separei em 2 SGs
+3. **IAM ARN**: Sintaxe inválida (`arn:aws:iam:::aws`). **Corrigi**: `arn:aws:iam::aws`
+4. **SAST Pipeline**: `|| true` tornava o scan inútil. **Corrigi**: Removi `|| true`
+5. **Terraform Duplicado**: Blocos `backend` e `provider` duplicados. **Corrigi**: Removi duplicatas
+6. **YAML Quebrado**: Indentação inválida no `terraform-validate`. **Corrigi**: Reescrevi job
 
-### Aprendizados
+### A Lição Que Aprendi (Do Jeito Difícil)
 
-- IA acelera, mas não substitui revisão
-- Teste tudo
-- Documente os erros — mostram que você entende o código
+> IA acelera scaffolding, mas **produz erros que parecem corretos**.
+> Os 3 bugs mais perigosos (IAM ARN, security group bypass, healthcheck falso) passariam por revisão casual.
+> **Verificação linha-a-linha e execução real (`terraform plan`, `pytest`, `ruff check`) são inegociáveis.**
+
+### Transparência Total
+
+Se você (avaliador) me perguntar na entrevista "por que X?", consigo responder com:
+- A **teoria** (o que o README documenta)
+- O **bug real** (o que o commit `git show` revela)
+- A **iteração** (quantas vezes errei antes de acertar)
+
+— Isaac Nathan
