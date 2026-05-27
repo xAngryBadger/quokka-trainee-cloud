@@ -8,15 +8,21 @@ PORT="${2:-5000}"
 URL="http://${HOST}:${PORT}/health"
 
 # Requisicao wget unica: captura codigo de status e corpo
-# busybox wget suporta -q -O- e -S (headers da resposta do servidor)
-response=$(wget -qO- --timeout=5 -S "$URL" 2>&1)
+response=$(wget -qO- --timeout=5 "$URL" 2>&1)
+http_code=$?
 
-# Extrai codigo HTTP dos headers (ultima ocorrencia para redirecionamentos)
-http_code=$(echo "$response" | awk '/HTTP\//{print $2}' | tail -1)
+if [ $http_code -ne 0 ]; then
+  echo "CRITICO - HTTP ${http_code:-none} de ${URL}"
+  exit 1
+fi
 
-if [ "$http_code" != "200" ]; then
-echo "CRITICO - HTTP ${http_code:-none} de ${URL}"
-exit 1
+# Verifica se o corpo da resposta contém "status":"healthy"
+if echo "$response" | grep -q '"status"[[:space:]]*:[[:space:]]*"healthy"'; then
+  echo "OK - API saudavel em ${URL}"
+  exit 0
+else
+  echo "CRITICO - API respondeu 200 mas corpo sem status healthy em ${URL}"
+  exit 1
 fi
 
 # Extrai corpo (tudo apos a ultima linha em branco separando headers do corpo)

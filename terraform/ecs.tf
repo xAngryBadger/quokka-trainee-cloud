@@ -13,7 +13,8 @@ data "aws_subnets" "default" {
   }
 }
 
-# SG do ALB: aceita HTTP(80) da internet, egress apenas para ECS SG
+# SG do ALB: aceita HTTP(80) da internet
+# Nota: egress para ECS e gerenciado via IP ranges para evitar ciclo
 resource "aws_security_group" "alb_sg" {
   name        = "${var.app_name}-alb-sg"
   description = "ALB security group — aceita trafego HTTP da internet"
@@ -24,13 +25,6 @@ resource "aws_security_group" "alb_sg" {
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port       = var.container_port
-    to_port         = var.container_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ecs_sg.id]
   }
 
   tags = {
@@ -86,11 +80,11 @@ resource "aws_security_group" "ecs_sg" {
 # =============================================================================
 
 resource "aws_lb" "app" {
-  name            = "${var.app_name}-alb"
-  internal        = false
+  name               = "${var.app_name}-alb"
+  internal           = false
   load_balancer_type = "application"
-  security_groups = [aws_security_group.alb_sg.id]
-  subnets         = data.aws_subnets.default.ids
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = data.aws_subnets.default.ids
 }
 
 resource "aws_lb_target_group" "app" {
@@ -177,7 +171,7 @@ resource "aws_ecs_task_definition" "app" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.cpu
   memory                   = var.memory
-  execution_role_arn = aws_iam_role.ecs_task_execution.arn
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
 
   container_definitions = jsonencode([
     {
@@ -220,12 +214,12 @@ resource "aws_ecs_task_definition" "app" {
 # =============================================================================
 
 resource "aws_ecs_service" "app" {
-  name                   = "${var.app_name}-service"
-  cluster                = aws_ecs_cluster.main.id
-  task_definition        = aws_ecs_task_definition.app.arn
-  desired_count          = var.desired_count
-  launch_type            = "FARGATE"
-  force_new_deployment   = true
+  name                 = "${var.app_name}-service"
+  cluster              = aws_ecs_cluster.main.id
+  task_definition      = aws_ecs_task_definition.app.arn
+  desired_count        = var.desired_count
+  launch_type          = "FARGATE"
+  force_new_deployment = true
 
   network_configuration {
     subnets          = data.aws_subnets.default.ids
